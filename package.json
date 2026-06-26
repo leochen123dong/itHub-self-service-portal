@@ -1,0 +1,16 @@
+{
+  "name": "ithub-self-service-portal",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Self-service IT helpdesk portal demo on top of ITHub API",
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:web": "cd web && npm run dev",
+    "build": "cd web && npm run build",
+    "start": "cd server && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
