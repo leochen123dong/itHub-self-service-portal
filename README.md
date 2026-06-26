@@ -8,6 +8,9 @@
 4. 在"我的工单"中查看进度、补充备注
 5. 浏览知识库、服务目录，提交服务请求
 
+**线上 Demo**：<https://leochen123dong.github.io/itHub-self-service-portal/>
+（首次访问唤醒 Render 后端约需 30 秒；部署详情见 [DEPLOY.md](DEPLOY.md)）
+
 ## 预览
 
 ### 首页

@@ -13,7 +13,19 @@ import { ticketsRouter } from './routes/tickets.js';
 
 const app = express();
 
-app.use(cors({ origin: config.webOrigin, credentials: true }));
+const allowedOrigins = config.webOrigins;
+const corsOptions: cors.CorsOptions = {
+  credentials: true,
+  origin: (origin, cb) => {
+    // Allow same-origin / no-origin (curl, server-to-server)
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`Origin ${origin} not allowed by CORS`));
+  },
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 app.use(morgan('dev'));
@@ -42,5 +54,5 @@ app.listen(config.port, () => {
   console.log(`   Customer:  ${config.ithub.customerTag}`);
   console.log(`   AI Profile: ${config.ai.profileId ?? '(auto-discover at runtime via /api/ai/profiles)'}`);
   console.log(`   KB ID:      ${config.ai.kbId ?? '(set KB_ID in .env)'}`);
-  console.log(`   Web origin: ${config.webOrigin}\n`);
+  console.log(`   Web origin: ${config.webOrigins.join(', ')}\n`);
 });

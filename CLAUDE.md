@@ -32,7 +32,7 @@ cd web && npx tsc --noEmit
 cd web && npx vite build
 
 # 后端启动生产模式
-npm run build && npm start  # 注意：web 构建产物没自动被 server 提供，目前 demo 只用 dev
+cd server && npm run build && npm start
 ```
 
 冒烟测试脚本（端口在跑时）：
@@ -86,14 +86,31 @@ ITHub API (demo.logicalisservice.com/api)
 - **前端状态**：仅 3 个 zustand store（`authStore`、`chatStore`、`uiStore`）。其他页面数据用 `useState` + 组件内 fetch，无需全局缓存。
 - **前端组件**：手写轻量组件，不引 Ant Design / MUI。Markdown 用 `ChatMessage.tsx` 自写的 ~30 行渲染器。
 
-## 开发注意事项
-
-- ESM：`server/package.json` 和 `web/package.json` 都设了 `"type": "module"`，导入要带 `.js` 后缀（即使源文件是 `.ts`），tsconfig `moduleResolution: "Bundler"`。
-- TypeScript 严格模式开。async 路由 handler 显式声明 `Promise<void>` 返回类型（已在所有 handler 统一）。
-- 前端响应字段命名遵循 ITHub PascalCase（`TicketId`、`AIChatId`、`TicketState`）。`TicketForm.tsx` 用 `def.Name || def.PropertyName || def.Key` 等兜底匹配多种 schema。
-- 错误归一：上游 4xx/5xx 已经被 `ithubClient` 转 `ITHubError`，路由层翻译成 `{error: {code, message_zh}}` 返给前端。前端 `ApiError` 直接展示 `message_zh`。
-- 启动期发现：服务启动时**不会**自动 discover AI Profile / KB（计划里写了但没实现）。当前依赖 `.env` 显式配置 `AI_PROFILE_ID` / `KB_ID`。如果需要自动发现，加在 `server/src/config.ts` 启动 hook 中。
-
 ## 切换租户 / 重新 Demo
 
-只改 `server/.env`：`ITHUB_CUSTOMER_TAG`、`ITHUB_DEMO_IDENTITY`、`ITHUB_DEMO_PASSWORD`，可选 `AI_PROFILE_ID`、`KB_ID`。重启后端即生效，前端无需改动。
+只改 `server/.env`（本地）或 Render Environment（线上）：`ITHUB_CUSTOMER_TAG`、`ITHUB_DEMO_IDENTITY`、`ITHUB_DEMO_PASSWORD`，可选 `AI_PROFILE_ID`、`KB_ID`。重启后端即生效，前端无需改动。
+
+## 部署
+
+线上 Demo 跑在 GitHub Pages（静态前端）+ Render（Express 后端）。完整步骤见 [DEPLOY.md](DEPLOY.md)。
+
+```
+浏览器
+  ↓ https://leochen123dong.github.io/itHub-self-service-portal/
+GitHub Pages (web/dist/)
+  ↓ fetch https://ithub-portal-server.onrender.com/api/*
+Render (server/)
+  ↓ + AccessToken header
+https://demo.logicalisservice.com/api
+```
+
+部署相关文件：
+- `render.yaml` — Render Blueprint，声明服务名 `ithub-portal-server`、build/start 命令、健康检查 `/api/health`、env 变量。
+- `.github/workflows/deploy-web.yml` — push to main → `npm ci` → `npm run build`（注入 `VITE_BASE_PATH: /${{ github.event.repository.name }}/` 和 `VITE_API_BASE: ${{ secrets.VITE_API_BASE }}`）→ `actions/deploy-pages@v4`。
+- `web/vite.config.ts` — `base` 用 `VITE_BASE_PATH` 控制，dev 时默认 `/`。
+- `web/src/main.tsx` — **用 HashRouter**（不用 BrowserRouter），GH Pages 静态托管没有 SPA rewrite。
+- `web/public/404.html` — 直接刷新深链时兜底跳回首页。
+- `server/src/config.ts` — `webOrigins: string[]`，支持 `WEB_ORIGIN=a,b,c` 逗号分隔多个 origin（CORS）。
+- `server/src/index.ts` — CORS 用 function 校验 origin 数组，含 `credentials: true`。
+
+GitHub secret 只需一个：`VITE_API_BASE` = `https://ithub-portal-server.onrender.com/api`（**以 `/api` 结尾，无尾斜杠**）。Render 那边的 `WEB_ORIGIN` 要包含 `https://leochen123dong.github.io`（**不要漏 https**）。

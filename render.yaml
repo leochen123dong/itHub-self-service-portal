@@ -1,0 +1,44 @@
+# Render Blueprint — deploys the Express backend.
+# Render reads this file when you create a new "Blueprint" service and
+# connects it to this repo. After creation, set the ITHUB_DEMO_* secrets
+# in the Render dashboard (Environment → Secret Files / Environment Variables).
+#
+# Get started: https://dashboard.render.com/blueprints → New Blueprint Instance
+# → connect this repo. Render will read render.yaml and create the service.
+
+services:
+  - type: web
+    name: ithub-portal-server
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: cd server && npm ci && npm run build
+    startCommand: cd server && npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: WEB_ORIGIN
+        # Comma-separated list. Update after first deploy once you know
+        # the GH Pages URL (Settings → Pages). For local dev prepend:
+        # http://localhost:5173,
+        sync: false
+      - key: ITHUB_BASE_URL
+        value: https://demo.logicalisservice.com
+      - key: ITHUB_CUSTOMER_TAG
+        value: ciscoinnovation1
+      # The four below MUST be set as secrets in the Render dashboard:
+      #   ITHUB_DEMO_IDENTITY
+      #   ITHUB_DEMO_PASSWORD
+      #   AI_PROFILE_ID
+      #   KB_ID
+      - key: ITHUB_DEMO_IDENTITY
+        sync: false
+      - key: ITHUB_DEMO_PASSWORD
+        sync: false
+      - key: AI_PROFILE_ID
+        sync: false
+      - key: KB_ID
+        sync: false

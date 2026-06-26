@@ -28,7 +28,10 @@ function boolEnv(name: string, fallback: boolean): boolean {
 
 export const config = {
   port: intEnv('PORT', 4000),
-  webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+  webOrigins: (process.env.WEB_ORIGIN ?? 'http://localhost:5173')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 
   ithub: {
     baseUrl: required('ITHUB_BASE_URL', 'https://demo.logicalisservice.com'),
