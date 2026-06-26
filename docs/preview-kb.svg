@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 560" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <linearGradient id="logoGrad4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2B6CB0"/>
+      <stop offset="100%" stop-color="#ED8936"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="880" height="560" fill="#F7FAFC"/>
+  <rect x="0" y="0" width="880" height="60" fill="#FFFFFF"/>
+  <line x1="0" y1="60" x2="880" y2="60" stroke="#E2E8F0"/>
+  <rect x="24" y="14" width="32" height="32" rx="6" fill="url(#logoGrad4)"/>
+  <text x="40" y="36" fill="#FFFFFF" font-size="18" font-weight="800" text-anchor="middle">I</text>
+  <text x="68" y="36" fill="#2B6CB0" font-size="16" font-weight="700">ITHub 智能服务门户</text>
+  <text x="220" y="34" fill="#718096" font-size="14">首页</text>
+  <text x="282" y="34" fill="#718096" font-size="14">AI助手</text>
+  <rect x="338" y="14" width="76" height="32" rx="6" fill="#EBF4FF"/>
+  <text x="376" y="34" fill="#2B6CB0" font-size="14" font-weight="600" text-anchor="middle">知识库</text>
+  <text x="428" y="34" fill="#718096" font-size="14">服务目录</text>
+  <text x="500" y="34" fill="#718096" font-size="14">我的工单</text>
+
+  <text x="40" y="100" fill="#1A202C" font-size="22" font-weight="600">知识库</text>
+  <text x="40" y="122" fill="#718096" font-size="13">搜索或浏览常见 IT 问题及解决方案</text>
+
+  <!-- Search bar -->
+  <rect x="40" y="148" width="800" height="64" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="60" y="170" width="540" height="32" rx="6" fill="#FFFFFF" stroke="#CBD5E0"/>
+  <text x="76" y="190" fill="#1A202C" font-size="13">密码</text>
+  <rect x="612" y="170" width="72" height="32" rx="6" fill="#2B6CB0"/>
+  <text x="648" y="190" fill="#FFFFFF" font-size="14" text-anchor="middle">搜索</text>
+  <rect x="696" y="170" width="64" height="32" rx="6" fill="#FFFFFF" stroke="#CBD5E0"/>
+  <text x="728" y="190" fill="#1A202C" font-size="14" text-anchor="middle">清除</text>
+
+  <!-- Result 1 -->
+  <rect x="40" y="232" width="800" height="68" rx="8" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="60" y="258" fill="#1A202C" font-size="15" font-weight="600">如何重置 Windows 域账号密码</text>
+  <text x="60" y="280" fill="#718096" font-size="12">通过自助门户重置密码，适用于忘记密码或密码过期的情况。流程包括验证身份、接收验证码、设置新密码……</text>
+
+  <!-- Result 2 -->
+  <rect x="40" y="312" width="800" height="68" rx="8" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="60" y="338" fill="#1A202C" font-size="15" font-weight="600">VPN 双因素认证设置指南</text>
+  <text x="60" y="360" fill="#718096" font-size="12">首次配置 VPN 时需要绑定手机令牌，本文逐步说明在 Cisco AnyConnect 客户端中配置双因素认证的流程……</text>
+
+  <!-- Result 3 -->
+  <rect x="40" y="392" width="800" height="68" rx="8" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="60" y="418" fill="#1A202C" font-size="15" font-weight="600">邮箱密码策略与复杂度要求</text>
+  <text x="60" y="440" fill="#718096" font-size="12">公司邮箱密码至少 12 位，包含大小写字母、数字和特殊字符，每 90 天需要更换一次……</text>
+
+  <text x="40" y="500" fill="#A0AEC0" font-size="12">共 12 条结果 · 点击文章查看详情</text>
+</svg>

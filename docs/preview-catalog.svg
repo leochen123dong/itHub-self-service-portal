@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 560" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <linearGradient id="logoGrad5" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2B6CB0"/>
+      <stop offset="100%" stop-color="#ED8936"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="880" height="560" fill="#F7FAFC"/>
+  <rect x="0" y="0" width="880" height="60" fill="#FFFFFF"/>
+  <line x1="0" y1="60" x2="880" y2="60" stroke="#E2E8F0"/>
+  <rect x="24" y="14" width="32" height="32" rx="6" fill="url(#logoGrad5)"/>
+  <text x="40" y="36" fill="#FFFFFF" font-size="18" font-weight="800" text-anchor="middle">I</text>
+  <text x="68" y="36" fill="#2B6CB0" font-size="16" font-weight="700">ITHub 智能服务门户</text>
+  <text x="220" y="34" fill="#718096" font-size="14">首页</text>
+  <text x="282" y="34" fill="#718096" font-size="14">AI助手</text>
+  <text x="358" y="34" fill="#718096" font-size="14">知识库</text>
+  <rect x="416" y="14" width="92" height="32" rx="6" fill="#EBF4FF"/>
+  <text x="462" y="34" fill="#2B6CB0" font-size="14" font-weight="600" text-anchor="middle">服务目录</text>
+  <text x="520" y="34" fill="#718096" font-size="14">我的工单</text>
+
+  <text x="40" y="100" fill="#1A202C" font-size="22" font-weight="600">服务目录</text>
+  <text x="40" y="122" fill="#718096" font-size="13">选择一个服务提交请求</text>
+
+  <!-- 4 tiles in grid -->
+  <!-- Tile 1: 申请新设备 -->
+  <rect x="40" y="160" width="395" height="150" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="56" y="176" width="48" height="48" rx="8" fill="#EBF4FF"/>
+  <text x="80" y="208" fill="#2B6CB0" font-size="22" text-anchor="middle">📱</text>
+  <text x="116" y="200" fill="#1A202C" font-size="16" font-weight="600">申请新设备</text>
+  <text x="116" y="222" fill="#718096" font-size="13">申请笔记本电脑、外设、移动设备</text>
+
+  <!-- Tile 2: 软件安装 -->
+  <rect x="445" y="160" width="395" height="150" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="461" y="176" width="48" height="48" rx="8" fill="#EBF4FF"/>
+  <text x="485" y="208" fill="#2B6CB0" font-size="22" text-anchor="middle">💿</text>
+  <text x="521" y="200" fill="#1A202C" font-size="16" font-weight="600">软件安装申请</text>
+  <text x="521" y="222" fill="#718096" font-size="13">申请办公、设计、开发类软件许可证</text>
+
+  <!-- Tile 3: 权限申请 -->
+  <rect x="40" y="330" width="395" height="150" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="56" y="346" width="48" height="48" rx="8" fill="#EBF4FF"/>
+  <text x="80" y="378" fill="#2B6CB0" font-size="22" text-anchor="middle">🔑</text>
+  <text x="116" y="370" fill="#1A202C" font-size="16" font-weight="600">权限申请</text>
+  <text x="116" y="392" fill="#718096" font-size="13">申请系统访问权限或数据权限</text>
+
+  <!-- Tile 4: 网络支持 -->
+  <rect x="445" y="330" width="395" height="150" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="461" y="346" width="48" height="48" rx="8" fill="#EBF4FF"/>
+  <text x="485" y="378" fill="#2B6CB0" font-size="22" text-anchor="middle">🌐</text>
+  <text x="521" y="370" fill="#1A202C" font-size="16" font-weight="600">网络支持</text>
+  <text x="521" y="392" fill="#718096" font-size="13">VPN、WiFi、网络故障申报</text>
+</svg>

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 520" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2B6CB0"/>
+      <stop offset="100%" stop-color="#ED8936"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Page background -->
+  <rect width="880" height="520" fill="#F7FAFC"/>
+
+  <!-- Top nav -->
+  <rect x="0" y="0" width="880" height="60" fill="#FFFFFF"/>
+  <line x1="0" y1="60" x2="880" y2="60" stroke="#E2E8F0"/>
+
+  <!-- Logo -->
+  <rect x="24" y="14" width="32" height="32" rx="6" fill="url(#logoGrad)"/>
+  <text x="40" y="36" fill="#FFFFFF" font-size="18" font-weight="800" text-anchor="middle">I</text>
+  <text x="68" y="36" fill="#2B6CB0" font-size="16" font-weight="700">ITHub 智能服务门户</text>
+
+  <!-- Tabs -->
+  <rect x="220" y="14" width="60" height="32" rx="6" fill="#EBF4FF"/>
+  <text x="250" y="34" fill="#2B6CB0" font-size="14" font-weight="600" text-anchor="middle">首页</text>
+  <text x="298" y="34" fill="#718096" font-size="14" text-anchor="middle">AI助手</text>
+  <text x="368" y="34" fill="#718096" font-size="14" text-anchor="middle">知识库</text>
+  <text x="438" y="34" fill="#718096" font-size="14" text-anchor="middle">服务目录</text>
+  <text x="510" y="34" fill="#718096" font-size="14" text-anchor="middle">我的工单</text>
+
+  <!-- User area -->
+  <circle cx="772" cy="30" r="16" fill="#2B6CB0"/>
+  <text x="772" y="35" fill="#FFFFFF" font-size="14" font-weight="600" text-anchor="middle">D</text>
+  <text x="796" y="35" fill="#1A202C" font-size="14">demo.user</text>
+  <text x="864" y="35" fill="#2B6CB0" font-size="13" text-anchor="end">退出</text>
+
+  <!-- Page title -->
+  <text x="40" y="112" fill="#1A202C" font-size="22" font-weight="600">欢迎使用 ITHub 智能服务门户</text>
+  <text x="40" y="136" fill="#718096" font-size="13">在这里您可以自助解决大部分 IT 问题，未解决时可一键转人工</text>
+
+  <!-- Card 1: AI 助手 -->
+  <rect x="40" y="170" width="395" height="150" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="56" y="186" width="48" height="48" rx="8" fill="#EBF4FF"/>
+  <text x="80" y="218" fill="#2B6CB0" font-size="22" text-anchor="middle">AI</text>
+  <text x="116" y="208" fill="#1A202C" font-size="16" font-weight="600">AI 助手</text>
+  <text x="116" y="232" fill="#718096" font-size="13">向 AI 提问，秒级获得答案或知识库文章</text>
+  <text x="56" y="290" fill="#2B6CB0" font-size="12" font-weight="500">→ 开始对话</text>
+
+  <!-- Card 2: 知识库 -->
+  <rect x="445" y="170" width="395" height="150" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="461" y="186" width="48" height="48" rx="8" fill="#EBF4FF"/>
+  <text x="485" y="218" fill="#2B6CB0" font-size="22" text-anchor="middle">KB</text>
+  <text x="521" y="208" fill="#1A202C" font-size="16" font-weight="600">知识库</text>
+  <text x="521" y="232" fill="#718096" font-size="13">浏览和搜索常见 IT 问题及解决方案</text>
+  <text x="461" y="290" fill="#2B6CB0" font-size="12" font-weight="500">→ 浏览知识库</text>
+
+  <!-- Card 3: 服务目录 -->
+  <rect x="40" y="340" width="395" height="150" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="56" y="356" width="48" height="48" rx="8" fill="#EBF4FF"/>
+  <text x="80" y="388" fill="#2B6CB0" font-size="22" text-anchor="middle">SR</text>
+  <text x="116" y="378" fill="#1A202C" font-size="16" font-weight="600">服务目录</text>
+  <text x="116" y="402" fill="#718096" font-size="13">提交服务请求，例如申请新设备、申请权限</text>
+  <text x="56" y="460" fill="#2B6CB0" font-size="12" font-weight="500">→ 查看目录</text>
+
+  <!-- Card 4: 我的工单 -->
+  <rect x="445" y="340" width="395" height="150" rx="12" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <rect x="461" y="356" width="48" height="48" rx="8" fill="#EBF4FF"/>
+  <text x="485" y="388" fill="#2B6CB0" font-size="22" text-anchor="middle">#</text>
+  <text x="521" y="378" fill="#1A202C" font-size="16" font-weight="600">我的工单</text>
+  <text x="521" y="402" fill="#718096" font-size="13">查看工单进度、时间线，并补充备注</text>
+  <text x="461" y="460" fill="#2B6CB0" font-size="12" font-weight="500">→ 查看工单</text>
+</svg>

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 560" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <linearGradient id="logoGrad3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2B6CB0"/>
+      <stop offset="100%" stop-color="#ED8936"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="880" height="560" fill="#F7FAFC"/>
+  <rect x="0" y="0" width="880" height="60" fill="#FFFFFF"/>
+  <line x1="0" y1="60" x2="880" y2="60" stroke="#E2E8F0"/>
+  <rect x="24" y="14" width="32" height="32" rx="6" fill="url(#logoGrad3)"/>
+  <text x="40" y="36" fill="#FFFFFF" font-size="18" font-weight="800" text-anchor="middle">I</text>
+  <text x="68" y="36" fill="#2B6CB0" font-size="16" font-weight="700">ITHub 智能服务门户</text>
+
+  <!-- chat context (dimmed) -->
+  <text x="40" y="100" fill="#1A202C" font-size="22" font-weight="600">AI 助手</text>
+
+  <rect x="40" y="130" width="800" height="240" rx="12" fill="#FFFFFF" stroke="#E2E8F0" opacity="0.5"/>
+
+  <!-- User message -->
+  <circle cx="700" cy="172" r="16" fill="#2B6CB0" opacity="0.5"/>
+  <rect x="450" y="156" width="240" height="44" rx="8" fill="#2B6CB0" opacity="0.5"/>
+  <text x="464" y="177" fill="#FFFFFF" font-size="14">我的 VPN 连不上怎么办？</text>
+
+  <!-- AI message -->
+  <circle cx="64" cy="244" r="16" fill="#ED8936" opacity="0.5"/>
+  <rect x="90" y="228" width="540" height="80" rx="8" fill="#FFFFFF" stroke="#E2E8F0" opacity="0.5"/>
+  <text x="104" y="252" fill="#1A202C" font-size="14" font-weight="600">VPN 故障排查建议</text>
+  <text x="104" y="272" fill="#4A5568" font-size="13">1. 检查网络连接</text>
+  <text x="104" y="290" fill="#4A5568" font-size="13">2. 确认客户端版本</text>
+  <text x="104" y="308" fill="#4A5568" font-size="13">3. 联系网络管理员</text>
+
+  <!-- Modal overlay -->
+  <rect x="0" y="130" width="880" height="400" fill="#1A202C" opacity="0.45"/>
+
+  <!-- Modal box -->
+  <rect x="220" y="200" width="440" height="220" rx="12" fill="#FFFFFF"/>
+  <text x="244" y="240" fill="#1A202C" font-size="18" font-weight="600">转人工并创建工单</text>
+
+  <text x="244" y="276" fill="#4A5568" font-size="13">系统将把本次对话的关键内容汇总作为工单描述，</text>
+  <text x="244" y="294" fill="#4A5568" font-size="13">并分配给服务台坐席处理。</text>
+  <text x="244" y="320" fill="#4A5568" font-size="13">提交后您可以在"我的工单"中跟踪进度。</text>
+
+  <!-- Modal actions -->
+  <rect x="476" y="358" width="80" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E0"/>
+  <text x="516" y="381" fill="#1A202C" font-size="14" text-anchor="middle">取消</text>
+
+  <rect x="568" y="358" width="72" height="36" rx="6" fill="#ED8936"/>
+  <text x="604" y="381" fill="#FFFFFF" font-size="14" text-anchor="middle">确认创建</text>
+
+  <!-- Toast in corner -->
+  <rect x="600" y="80" width="260" height="60" rx="8" fill="#FFFFFF" stroke="#C6F6D5"/>
+  <rect x="600" y="80" width="4" height="60" fill="#38A169"/>
+  <text x="620" y="108" fill="#1A202C" font-size="14" font-weight="500">✅ 工单 #10247 已创建</text>
+  <text x="620" y="128" fill="#2B6CB0" font-size="12">→ 查看工单</text>
+</svg>

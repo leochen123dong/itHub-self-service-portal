@@ -8,6 +8,26 @@
 4. 在"我的工单"中查看进度、补充备注
 5. 浏览知识库、服务目录，提交服务请求
 
+## 预览
+
+### 首页
+
+![ITHub Portal 首页预览](docs/preview-home.svg)
+
+### AI 助手 — 对话 + 一键转人工
+
+| 聊天界面 | 转人工确认 |
+|---|---|
+| ![Chat](docs/preview-chat.svg) | ![Escalate](docs/preview-escalate.svg) |
+
+### 知识库 / 服务目录 / 我的工单
+
+| 知识库搜索 | 服务目录 | 工单详情 + 时间线 |
+|---|---|---|
+| ![KB](docs/preview-kb.svg) | ![Catalog](docs/preview-catalog.svg) | ![Ticket](docs/preview-ticket.svg) |
+
+> 截图替换说明：将真实的截图放在 `docs/preview-*.png`（或 `.jpg`），文件名保持一致即可，无需改 README。
+
 ## 架构
 
 ```
@@ -58,4 +78,5 @@ npm run dev
 
 - `server/` — Express 后端代理
 - `web/` — React + Vite 前端
+- `docs/` — 截图 / 预览 SVG（待真实截图替换）
 - 详细计划见 `/Users/leo.chen/.claude/plans/demo-it-valiant-aho.md`
