@@ -208,6 +208,18 @@ async function keywordSearch(
     .map((r) => ({ article: r, score: scoreArticle(r, tokens) }))
     .sort((a, b) => b.score - a.score);
 
+  // Find K100071 specifically so we can see if it's in the list and what
+  // it scored, even if it doesn't make top 5.
+  const target = allScored.find((s) => pickId(s.article) === 100071);
+  if (target) {
+    console.log(
+      `[kb] target K100071 score=${target.score} title="${pickTitle(target.article)}" ` +
+      `summaryLen=${(target.article.Summary || '').length} descTextLen=${(target.article.DescriptionText || '').length}`,
+    );
+  } else {
+    console.log('[kb] K100071 not in listAllArticles result');
+  }
+
   const candidates = allScored.filter((s) => s.score > 0).slice(0, topK);
 
   // Diagnostic: log which fields are actually populated so we can debug
@@ -215,7 +227,7 @@ async function keywordSearch(
   console.log(
     `[kb] keyword tokens=${JSON.stringify(tokens)} ` +
     `candidates=${candidates.length} ` +
-    `topScores=${JSON.stringify(allScored.slice(0, 3).map((s) => ({ title: pickTitle(s.article), score: s.score })))}`,
+    `topScores=${JSON.stringify(allScored.slice(0, 5).map((s) => ({ id: pickId(s.article), title: pickTitle(s.article), score: s.score, summaryLen: (s.article.Summary || '').length })))}`,
   );
 
   // The list endpoint returns summaries without bodies — fetch full content
