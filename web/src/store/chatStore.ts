@@ -52,31 +52,54 @@ async function resolveTemplateId(): Promise<number | null> {
       })
       .slice(0, 8); // probe at most 8 to bound latency
 
+    // Score each candidate and pick the best one. A template is usable iff:
+//   1. It has OwnerUserGroupId and AssignedUserGroupId (so the ticket has
+//      an owning group).
+//   2. Its Script reads from input.* (uses our Summary/Description) rather
+//      than hardcoding values for a specific use case. Templates whose
+//      Script instantiates ITHub-only classes (e.g. new TicketCategoryItem())
+//      throw at runtime and 404 the create.
+// Score = +2 per group set, +2 if Script reads input.X, -3 if Script has
+// hardcoded strings (looks for `ticket.X = "..."`), -5 if Script
+// instantiates any `new XxxItem()`.
+    function scoreTemplate(detail: Record<string, unknown>): number {
+      let s = 0;
+      if (detail.OwnerUserGroupId != null) s += 2;
+      if (detail.AssignedUserGroupId != null) s += 2;
+      const script = String(detail.Script ?? '');
+      if (/input\.\s*\w+/.test(script)) s += 2;
+      if (/ticket\.\w+\s*=\s*"/.test(script)) s -= 3;
+      if (/new\s+\w+Item\s*\(/.test(script)) s -= 5;
+      return s;
+    }
+
+    let best: { id: number; name: string; detail: Record<string, unknown>; score: number } | null = null;
     for (const cand of eligible) {
       try {
         const detail = (await catalogApi.get(cand.TicketTemplateId)) as unknown as Record<string, unknown>;
-        if (detail?.OwnerUserGroupId != null && detail?.AssignedUserGroupId != null) {
-          cachedTemplateId = cand.TicketTemplateId;
-          console.log(
-            '[ticket] picked template:',
-            cachedTemplateId,
-            'name:',
-            cand.Name,
-            `(groups set, probed ${eligible.indexOf(cand) + 1}/${eligible.length})`,
-          );
-          return cachedTemplateId;
-        }
+        const score = scoreTemplate(detail);
         console.log(
-          '[ticket] skip template',
+          '[ticket] candidate',
           cand.TicketTemplateId,
           cand.Name,
-          '— no Owner/Assigned group',
+          'score=', score,
+          'scriptSnippet=',
+          String(detail.Script ?? '').slice(0, 80),
         );
+        if (score < 0) continue;
+        if (!best || score > best.score) {
+          best = { id: cand.TicketTemplateId, name: cand.Name ?? '', detail, score };
+        }
       } catch (e) {
         console.warn('[ticket] detail GET failed for', cand.TicketTemplateId, (e as Error)?.message);
       }
     }
-    console.warn('[ticket] no template with Owner/Assigned group set');
+    if (best) {
+      cachedTemplateId = best.id;
+      console.log('[ticket] picked template:', cachedTemplateId, 'name:', best.name, 'score=', best.score);
+      return cachedTemplateId;
+    }
+    console.warn('[ticket] no usable template found after scoring');
     return null;
   } catch (e) {
     console.warn('[ticket] catalog.list failed:', (e as Error)?.message);
