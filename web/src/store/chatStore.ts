@@ -228,12 +228,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .join('\n\n');
     const finalDesc = (description || '').trim() || summary || '（无描述）';
 
-    // Strategy: try ByCheckPoint first (it may return a pre-filled incident
-    // template). If that doesn't yield a usable item, fall back to listing
-    // available ticket templates and using the first one — a TicketTemplateId
-    // of 0 or undefined causes ITHub to return 404.
+    // Resolve which template to use. byCheckPoint may return a pre-filled
+    // template ID for the AIChat context; otherwise we fall back to the
+    // best-scored template from the catalog.
     let templateId: number | undefined;
-    let preFilled: Record<string, unknown> | undefined;
+    let ticketType: number | undefined;
     try {
       const cp = await ticketsApi.byCheckPoint(`AIChat:${chatId}`);
       const item =
@@ -243,7 +242,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         cp?.TicketProblemItems?.[0];
       if (item) {
         templateId = item.TicketTemplateId;
-        preFilled = { ...item };
+        // Pick the ticketType from which array we matched (0/1/2/3).
+        ticketType =
+          cp?.TicketIncidentItems?.[0] === item
+            ? 0
+            : cp?.TicketProblemItems?.[0] === item
+            ? 1
+            : cp?.TicketChangeItems?.[0] === item
+            ? 2
+            : 3;
       }
     } catch (e) {
       console.warn('[ticket] byCheckPoint failed:', (e as Error)?.message);
@@ -259,60 +266,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error('未找到可用的工单模板');
     }
 
-    // Fetch the full template detail so we can spread its TenantId /
-    // OwnerUserGroup / AssignedUserGroup into the create payload. The list
-    // endpoint returns a stripped-down object that ITHub rejects with 404
-    // when used as a ticket-create payload, even with a valid
-    // TicketTemplateId. The single-template GET returns the fields needed
-    // for creation.
-    let templateDetail: Record<string, unknown> | undefined;
+    // Server now knows the correct ITHub create path
+    // (POST /api/ServiceDesk/Customers/{tag}/TicketTemplates/{id}/TicketIncidents)
+    // and forwards with the tenant ApiKey. We just send the user-input
+    // fields.
     try {
-      const detail = await catalogApi.get(templateId);
-      templateDetail = detail as unknown as Record<string, unknown>;
-      console.log('[ticket] template detail keys:', Object.keys(detail ?? {}));
-      // The form config is the source of truth for required input fields.
-      // The create endpoint may reject the ticket silently (404) when these
-      // are missing.
-      console.log('[ticket] UserInputFormConfig:', (detail as any)?.UserInputFormConfig);
-      console.log('[ticket] TicketTemplateConfig:', (detail as any)?.TicketTemplateConfig);
-      console.log('[ticket] Script:', (detail as any)?.Script);
-    } catch (e) {
-      console.warn('[ticket] catalog.get failed:', (e as Error)?.message);
-    }
-
-    // Try a minimal payload first — only the fields ITHub requires for ticket
-    // creation. Spreading the entire template detail previously caused 404
-    // because we forwarded Sid / AccessFlags from the template's own ACL
-    // context, which doesn't match the current user's session.
-    const detail = templateDetail ?? {};
-    const incidentCfg = (detail.TicketTemplateConfig as Record<string, unknown> | undefined)?.IncidentConfig as
-      | Record<string, unknown>
-      | undefined;
-    const payload: Record<string, unknown> = {
-      TicketTemplateId: templateId,
-      Summary: finalDesc.slice(0, 200),
-      Description: finalDesc,
-      TicketGroupId: detail.TicketGroupId,
-      TicketType: detail.TicketType,
-      OwnerUserGroupId: detail.OwnerUserGroupId,
-      AssignedUserGroupId: detail.AssignedUserGroupId,
-      ServiceLevelId: detail.ServiceLevelId,
-      TimeZoneInfoId: detail.TimeZoneInfoId,
-      CustomerTag: 'ciscoinnovation1',
-      IncidentState: incidentCfg?.IncidentState,
-      // SecurityContainerSid scopes the new ticket to the template's own
-      // security container. Required when the template is in a non-default
-      // container; without it ITHub may 404 the create.
-      SecurityContainerSid: detail.SecurityContainerSid,
-    };
-    // Drop nulls — ITHub rejects null in some fields with 404.
-    for (const k of Object.keys(payload)) {
-      if (payload[k] === null || payload[k] === undefined) delete payload[k];
-    }
-    console.log('[ticket] payload (full):', payload);
-
-    try {
-      const created = await ticketsApi.create(payload);
+      const created = await ticketsApi.create({
+        templateId,
+        ticketType,
+        summary: finalDesc.slice(0, 200),
+        description: finalDesc,
+      });
       const ticketId = created?.TicketId ?? created?.ticketId ?? created?.Id ?? null;
       if (ticketId) {
         set({ createdTicketId: ticketId });

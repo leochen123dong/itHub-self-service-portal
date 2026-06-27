@@ -46,6 +46,11 @@ export const config = {
     customerTag: required('ITHUB_CUSTOMER_TAG', 'ciscoinnovation1'),
     demoIdentity: process.env.ITHUB_DEMO_IDENTITY ?? '',
     demoPassword: process.env.ITHUB_DEMO_PASSWORD ?? '',
+    // Tenant-level ApiKey. Required for ticket create
+    // (POST /api/ServiceDesk/Customers/{tag}/TicketTemplates/{id}/TicketIncidents)
+    // — the user AccessToken alone returns 404 for create. Get it from the
+    // ITHub admin (tenant → API / Integration).
+    apiKey: process.env.ITHUB_API_KEY ?? '',
   },
 
   ai: {

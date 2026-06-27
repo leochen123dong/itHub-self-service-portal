@@ -9,6 +9,10 @@ interface FetchOptions {
   method?: string;
   body?: unknown;
   accessToken?: string | null;
+  // Tenant-level API key. When set, sent as `ApiKey` header instead of
+  // (or in addition to) the customerTag query param. Required for
+  // ticket create.
+  apiKey?: string | null;
   query?: Record<string, string | number | undefined | null>;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -29,10 +33,11 @@ export async function ithubFetch<T = unknown>(
   path: string,
   options: FetchOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, accessToken, query, timeoutMs = TIMEOUT_MS, signal } = options;
+  const { method = 'GET', body, accessToken, apiKey, query, timeoutMs = TIMEOUT_MS, signal } = options;
   const url = buildUrl(path, query);
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (accessToken) headers['AccessToken'] = accessToken;
+  if (apiKey) headers['ApiKey'] = apiKey;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
   let lastErr: unknown = null;
