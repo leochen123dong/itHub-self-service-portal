@@ -23,3 +23,16 @@ healthRouter.get('/debug/config', (_req, res) => {
     commitHint: 'cookie-fix-v3',
   });
 });
+
+// TEMP: emit Set-Cookie with current config so we can curl-verify the attributes
+// without needing real ITHub creds. Remove after debugging.
+healthRouter.get('/debug/test-cookie', (_req, res) => {
+  res.cookie(config.session.cookieName, 'test-value-12345', {
+    httpOnly: true,
+    sameSite: config.session.cookieSameSite,
+    secure: config.session.cookieSecure,
+    maxAge: 60_000,
+    path: '/',
+  });
+  res.json({ ok: true });
+});
