@@ -60,13 +60,7 @@ export function TicketsPage() {
     if (!detail || !comment.trim()) return;
     setSubmitting(true);
     try {
-      // ITHub uses PUT to add journals; body shape depends on ticket type.
-      // Best-effort: PUT with a journal entry.
-      await ticketsApi.update(detail.TicketId, {
-        TicketJournals: [
-          { Content: comment, TicketJournalType: 'UserComment' },
-        ],
-      });
+      await ticketsApi.addComment(detail.TicketId, comment.trim());
       setComment('');
       toast({ type: 'success', message: '备注已添加' });
       loadDetail(String(detail.TicketId));

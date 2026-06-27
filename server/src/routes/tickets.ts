@@ -154,3 +154,89 @@ ticketsRouter.put('/:id', requireSession, async (req, res): Promise<void> => {
     res.status(status).json(body);
   }
 });
+
+// Add a journal/comment to a ticket. ITHub rejects adding journals while
+// the ticket is in the "Registered" (state 0) state with
+// TicketInRegisteredStatusException, so we first transition to "Open"
+// (state 1) if needed. State field name and endpoint suffix depend on
+// the ticket type (0=Incident, 1=Problem, 2=Change, 3=Request).
+//
+// Body: { content: string }
+ticketsRouter.post('/:id/journals', requireSession, async (req, res): Promise<void> => {
+  const ticketId = req.params.id;
+  const content = String(req.body?.content ?? '').trim();
+  if (!content) {
+    res.status(400).json({ error: { code: 'INVALID', message_zh: '备注内容不能为空' } });
+    return;
+  }
+
+  // Pull ticket detail to learn TicketType and current IncidentState.
+  let ticket: Record<string, unknown> = {};
+  try {
+    ticket = (await ithubFetch<any>(`/api/ServiceDesk/Tickets/${ticketId}`, {
+      accessToken: req.session!.accessToken,
+    })) as Record<string, unknown>;
+  } catch (e) {
+    const { status, body } = err(e, '获取工单失败');
+    res.status(status).json(body);
+    return;
+  }
+
+  const ticketType = Number(ticket.TicketType ?? 0);
+  const stateFieldMap: Record<number, { field: string; endpoint: string }> = {
+    0: { field: 'IncidentStateUpdate', endpoint: 'TicketIncidents' },
+    1: { field: 'ProblemStateUpdate', endpoint: 'TicketProblems' },
+    2: { field: 'ChangeStateUpdate', endpoint: 'TicketChanges' },
+    3: { field: 'RequestStateUpdate', endpoint: 'TicketRequests' },
+  };
+  const stateInfo = stateFieldMap[ticketType] ?? stateFieldMap[0];
+
+  // For incidents, also need IncidentState specifically (TicketState is
+  // a generic "Registered"/"Open" string for the UI, but state transitions
+  // are driven by the typed field).
+  const currentState = Number(
+    ticket.IncidentState ?? ticket.ProblemState ?? ticket.ChangeState ?? ticket.RequestState ?? 0,
+  );
+
+  if (currentState === 0) {
+    try {
+      await ithubFetch<any>(`/api/ServiceDesk/${stateInfo.endpoint}/${ticketId}/State`, {
+        method: 'PUT',
+        accessToken: req.session!.accessToken,
+        body: {
+          [stateInfo.field]: 1,
+          TicketSuspendData: null,
+          TicketClosureData: null,
+        },
+      });
+    } catch (e) {
+      // Don't block the comment on a failed state transition — ITHub might
+      // already be in a non-Registered state, or the user lacks permission.
+      // If the journal POST below also fails, the real error will surface.
+      console.warn(`[ticket] state transition skipped for ${ticketId}:`, (e as Error)?.message);
+    }
+  }
+
+  // Convert plain text to the <p>...</p> HTML ITHub expects.
+  const html = '<p>' + content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+
+  try {
+    const data = await ithubFetch<any>('/api/ServiceDesk/TicketJournals', {
+      method: 'POST',
+      accessToken: req.session!.accessToken,
+      body: {
+        TicketId: Number(ticketId),
+        Html: html,
+        PrivateToCustomer: false,
+        IsDraft: false,
+        ContactId: null,
+        ContactType: null,
+        IncludeChildren: false,
+      },
+    });
+    res.json(data);
+  } catch (e) {
+    const { status, body } = err(e, '添加备注失败');
+    res.status(status).json(body);
+  }
+});
