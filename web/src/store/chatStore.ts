@@ -32,39 +32,52 @@ async function resolveTemplateId(): Promise<number | null> {
       })),
     );
 
-    // Two layers of filtering:
-    // 1. Drop placeholders (TicketTemplateId <= 0 — root category nodes
-    //    ITHub returns as "Service Request" with id = -1, etc.)
-    // 2. Drop Inactive templates (Active === false). Templates without an
-    //    Active field are assumed Active (newer ITHub versions omit it).
-    const eligible = templates.filter((t) => {
-      const id = t?.TicketTemplateId;
-      return typeof id === 'number' && id > 0 && t.Active !== false;
-    });
-    if (eligible.length === 0) {
-      console.warn('[ticket] no eligible templates after filtering');
-      return null;
-    }
+    // The list endpoint only returns {id, name, active, tag}. The critical
+    // "can I actually create a ticket?" fields — OwnerUserGroupId,
+    // AssignedUserGroupId, CustomerTag — only show up in the detail GET.
+    // So we can't filter purely on the list response.
+    //
+    // Strategy: collect a small candidate pool (incident-named first, then
+    // anything), do detail GETs, pick the first one whose detail has
+    // OwnerUserGroupId set. The Active flag is unreliable in this tenant —
+    // some Active templates have no Owner group and 404 on create, while
+    // some Inactive ones work fine.
+    const eligible = templates
+      .filter((t) => typeof t?.TicketTemplateId === 'number' && t.TicketTemplateId > 0)
+      .slice()
+      .sort((a, b) => {
+        const ai = String(a.Name ?? '').toLowerCase().includes('incident') ? 0 : 1;
+        const bi = String(b.Name ?? '').toLowerCase().includes('incident') ? 0 : 1;
+        return ai - bi;
+      })
+      .slice(0, 8); // probe at most 8 to bound latency
 
-    // "转人工" semantically maps to an Incident (something is broken, user
-    // needs help). Prefer an Incident-type template; otherwise fall back to
-    // the first eligible entry.
-    const incident = eligible.find((t) =>
-      String(t.Tag ?? '').toLowerCase().includes('incident') ||
-      String(t.Name ?? '').toLowerCase().includes('incident'),
-    );
-    const picked = incident ?? eligible[0];
-    cachedTemplateId = picked.TicketTemplateId;
-    console.log(
-      '[ticket] picked template:',
-      cachedTemplateId,
-      'name:',
-      picked.Name,
-      'tag:',
-      picked.Tag,
-      `(eligible=${eligible.length}/${templates.length})`,
-    );
-    return cachedTemplateId;
+    for (const cand of eligible) {
+      try {
+        const detail = (await catalogApi.get(cand.TicketTemplateId)) as unknown as Record<string, unknown>;
+        if (detail?.OwnerUserGroupId != null && detail?.AssignedUserGroupId != null) {
+          cachedTemplateId = cand.TicketTemplateId;
+          console.log(
+            '[ticket] picked template:',
+            cachedTemplateId,
+            'name:',
+            cand.Name,
+            `(groups set, probed ${eligible.indexOf(cand) + 1}/${eligible.length})`,
+          );
+          return cachedTemplateId;
+        }
+        console.log(
+          '[ticket] skip template',
+          cand.TicketTemplateId,
+          cand.Name,
+          '— no Owner/Assigned group',
+        );
+      } catch (e) {
+        console.warn('[ticket] detail GET failed for', cand.TicketTemplateId, (e as Error)?.message);
+      }
+    }
+    console.warn('[ticket] no template with Owner/Assigned group set');
+    return null;
   } catch (e) {
     console.warn('[ticket] catalog.list failed:', (e as Error)?.message);
     return null;
