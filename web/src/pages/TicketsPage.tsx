@@ -43,6 +43,8 @@ export function TicketsPage() {
         ticketsApi.get(id),
         ticketsApi.journals(id).catch(() => [] as TicketJournal[]),
       ]);
+      console.log('[DEBUG ticket detail]', t);
+      console.log('[DEBUG ticket journals]', js);
       setDetail(t as Ticket);
       setJournals(Array.isArray(js) ? js : []);
       setLastRefreshed(new Date());
