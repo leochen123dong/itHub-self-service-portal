@@ -251,20 +251,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.warn('[ticket] catalog.get failed:', (e as Error)?.message);
     }
 
+    // Try a minimal payload first — only the fields ITHub requires for ticket
+    // creation. Spreading the entire template detail previously caused 404
+    // because we forwarded Sid / SecurityContainerSid / AccessFlags from the
+    // template's own ACL context, which doesn't match the current user's
+    // session.
+    const detail = templateDetail ?? {};
     const payload: Record<string, unknown> = {
-      ...(preFilled ?? {}),
-      ...(templateDetail ?? {}),
       TicketTemplateId: templateId,
       Summary: finalDesc.slice(0, 200),
       Description: finalDesc,
+      TicketGroupId: detail.TicketGroupId,
+      TicketType: detail.TicketType,
+      OwnerUserGroupId: detail.OwnerUserGroupId,
+      AssignedUserGroupId: detail.AssignedUserGroupId,
+      ServiceLevelId: detail.ServiceLevelId,
+      TimeZoneInfoId: detail.TimeZoneInfoId,
     };
-    // Dump a compact view: id fields + critical owner/group + summary/desc
-    const slim = Object.fromEntries(
-      Object.entries(payload).filter(([k]) =>
-        /^(Ticket(Id|GroupId|Type|State|Status|Category)|OwnerUserGroup(Id|Name)|AssignedUserGroup(Id|Name)|Customer(Tag|Id|Name)|Priority|Impact|Urgency|Active|CreateOnSubmit|AccessFlags|TicketTemplateAccessFlags|Sid|SecurityContainerSid|Summary|Description)$/i.test(k),
-      ),
-    );
-    console.log('[ticket] payload (id fields):', slim);
+    // Drop nulls — ITHub rejects null in some fields with 404.
+    for (const k of Object.keys(payload)) {
+      if (payload[k] === null || payload[k] === undefined) delete payload[k];
+    }
+    console.log('[ticket] payload (minimal):', payload);
 
     try {
       const created = await ticketsApi.create(payload);
