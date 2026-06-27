@@ -135,7 +135,6 @@ aiRouter.post('/chat/message', requireSession, async (req, res): Promise<void> =
     res.json({
       Messages: [{ Role: 'Assistant', Content: reply.content }],
       SuggestedActions: POST_REPLY_SUGGESTIONS,
-      _kb: { used: !!kbContext, length: kbContext.length, preview: kbContext.slice(0, 300) },
     });
   } catch (err: any) {
     const zh =

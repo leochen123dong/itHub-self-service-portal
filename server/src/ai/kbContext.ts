@@ -120,7 +120,7 @@ export async function buildKbContext(
     })
     .join('\n\n');
 
-  return `以下是企业内部知识库的检索结果，请优先基于这些内容回答。如果知识库没有覆盖，再用通用 IT 知识补充：\n\n${blocks}\n\n---\n请用中文回答，引用知识库内容时使用 [1]、[2] 这样的编号注明来源。`;
+  return `以下是企业内部知识库的检索结果，请优先基于这些内容回答。如果知识库没有覆盖，再用通用 IT 知识补充。引用知识库内容时只用 [1]、[2] 这样的纯数字编号，不要加 KB、文章 ID、链接等任何前缀。\n\n${blocks}\n\n---\n请用中文回答，基于上述知识库内容回答用户问题；在合适的位置用 [1]、[2] 标注引用来源，文末不要再写引用说明。`;
 }
 
 async function tryEmbeddingSearch(
@@ -206,13 +206,7 @@ async function keywordSearch(
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 
-  // Debug: log top scores so we can see which articles matched what.
-  const debugTop = list
-    .map((r) => ({ title: pickTitle(r), score: scoreArticle(r, tokens) }))
-    .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
-  console.log(`[kb] keyword tokens=${JSON.stringify(tokens)} topScores=${JSON.stringify(debugTop)}`);
+  console.log(`[kb] keyword tokens=${JSON.stringify(tokens)} picked=${scored.length}`);
 
   return scored.map(({ article, score }) => ({
     id: pickId(article),
