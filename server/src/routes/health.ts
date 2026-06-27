@@ -61,6 +61,21 @@ healthRouter.get('/debug/kb/:id/articles', requireSession, async (req, res): Pro
   }
 });
 
+healthRouter.get('/debug/kb/:id/categories', requireSession, async (req, res): Promise<void> => {
+  try {
+    const kbId = parseInt(req.params.id, 10);
+    const data = await ithubFetch<any>(
+      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticleCategories`,
+      { accessToken: req.session!.accessToken },
+    );
+    res.json({ kbId, count: Array.isArray(data) ? data.length : 'not-array', categories: data });
+  } catch (e: any) {
+    res.status(e?.status || 500).json({
+      error: { code: e?.code || 'DEBUG_CATEGORIES_FAILED', message_zh: e?.message || '未知错误' },
+    });
+  }
+});
+
 healthRouter.post('/debug/kb-search', requireSession, async (req, res): Promise<void> => {
   const { query, kbId, topK = 5 } = req.body ?? {};
   if (!query) {
