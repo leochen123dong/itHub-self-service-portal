@@ -113,7 +113,11 @@ export function ChatPanel({ routeChatId, variant = 'standalone' }: Props) {
           )}
           {messages.map((m, i) => (
             <div key={i}>
-              <ChatMessage msg={m} />
+              <ChatMessage
+                msg={m}
+                msgIndex={i}
+                onRate={(idx, r) => useChatStore.getState().rateMessage(idx, r)}
+              />
               {m.Role !== 'User' && m.Role !== 'user' && i === messages.length - 1 && suggestions.length > 0 && (
                 <div style={{ marginLeft: 44, marginTop: 6 }}>
                   <SuggestedActions

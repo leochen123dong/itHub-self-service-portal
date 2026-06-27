@@ -15,6 +15,7 @@ interface ChatState {
   loadChat: (chatId: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   refreshSuggestions: (context?: number) => Promise<void>;
+  rateMessage: (msgIndex: number, rating: 'up' | 'down') => Promise<void>;
   escalateToTicket: (description?: string) => Promise<{ ticketId: number } | null>;
   reset: () => void;
 }
@@ -86,6 +87,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
   refreshSuggestions: async (context = 0) => {
     const r = await aiApi.suggestions(context);
     set({ suggestions: r.SuggestedActions || [] });
+  },
+
+  rateMessage: async (msgIndex, rating) => {
+    const { chatId, messages } = get();
+    if (!chatId) return;
+    const target = messages[msgIndex];
+    if (!target || target.Role !== 'Assistant') return;
+
+    // Optimistic update — flip back on error.
+    const previous = target.Rating;
+    set({
+      messages: messages.map((m, i) =>
+        i === msgIndex ? { ...m, Rating: rating } : m,
+      ),
+    });
+    try {
+      await aiApi.rateMessage(chatId, msgIndex, rating);
+    } catch {
+      set({
+        messages: get().messages.map((m, i) =>
+          i === msgIndex ? { ...m, Rating: previous ?? null } : m,
+        ),
+      });
+    }
   },
 
   escalateToTicket: async (description) => {

@@ -3,6 +3,8 @@ import type { ChatMessage as Msg } from '../types/api';
 
 interface Props {
   msg: Msg;
+  msgIndex: number;
+  onRate?: (msgIndex: number, rating: 'up' | 'down') => void;
 }
 
 // Minimal markdown: paragraphs + bold (**x**) + line breaks
@@ -35,14 +37,39 @@ function renderInline(text: string) {
   return parts;
 }
 
-export function ChatMessage({ msg }: Props) {
+export function ChatMessage({ msg, msgIndex, onRate }: Props) {
   const isUser = msg.Role === 'User' || msg.Role === 'user';
+  const isAssistant = msg.Role === 'Assistant' || msg.Role === 'assistant';
   const body = useMemo(() => render(msg.Content || ''), [msg.Content]);
+  const showRate = isAssistant && !!onRate;
+
   return (
     <div className={`msg msg-${isUser ? 'user' : 'assistant'}`}>
       <div className="msg-avatar">{isUser ? '我' : 'AI'}</div>
       <div className="msg-bubble">
         {body || <em style={{ opacity: .6 }}>（空）</em>}
+        {showRate && (
+          <div className="msg-rate">
+            <button
+              type="button"
+              className={msg.Rating === 'up' ? 'active' : ''}
+              onClick={() => onRate?.(msgIndex, 'up')}
+              aria-label="有帮助"
+              title="有帮助"
+            >
+              👍
+            </button>
+            <button
+              type="button"
+              className={msg.Rating === 'down' ? 'active' : ''}
+              onClick={() => onRate?.(msgIndex, 'down')}
+              aria-label="不准确"
+              title="不准确"
+            >
+              👎
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

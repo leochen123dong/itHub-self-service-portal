@@ -37,6 +37,11 @@ export function Layout() {
         </NavLink>
       </div>
       <div className="topnav-user">
+        {user?.isAdmin && (
+          <NavLink to="/admin" className="topnav-admin" title="管理后台">
+            🛠️
+          </NavLink>
+        )}
         <span className="user-avatar">{initial}</span>
         <span>{user?.userName || user?.identity}</span>
         <button className="btn btn-ghost btn-sm" onClick={handleLogout}>退出</button>

@@ -5,6 +5,7 @@ export interface User {
   userName: string;
   identity: string;
   customerTag?: string;
+  isAdmin?: boolean;
 }
 
 export interface ChatMessage {
@@ -13,6 +14,36 @@ export interface ChatMessage {
   ThinkContent?: string;
   CreatedUtc?: string;
   CreatedLocalTime?: string;
+  Rating?: 'up' | 'down' | null;
+  MsgIndex?: number;
+}
+
+export interface RatingResponse {
+  chatId: string;
+  msgIndex: number;
+  rating: 'up' | 'down';
+  at: number;
+}
+
+export interface AdminStats {
+  total: number;
+  up: number;
+  down: number;
+  rate: number;
+  recentRatings: Array<{
+    chatId: string;
+    msgIndex: number;
+    rating: 'up' | 'down';
+    at: number;
+    userName: string;
+  }>;
+  topDown: Array<{
+    chatId: string;
+    msgIndex: number;
+    content: string;
+    userName: string;
+    at: number;
+  }>;
 }
 
 export interface ChatInitResponse {

@@ -1,5 +1,12 @@
 import { api } from './client';
-import type { AIProfile, ChatInitResponse, ChatMessageResponse, SuggestedAction } from '../types/api';
+import type {
+  AIProfile,
+  AdminStats,
+  ChatInitResponse,
+  ChatMessageResponse,
+  RatingResponse,
+  SuggestedAction,
+} from '../types/api';
 
 export const aiApi = {
   profiles: () => api.get<AIProfile[]>('/ai/profiles'),
@@ -20,4 +27,14 @@ export const aiApi = {
 
   listChats: (context: number = 0) =>
     api.get<any[]>(`/ai/chats?context=${context}`),
+
+  rateMessage: (chatId: string, msgIndex: number, rating: 'up' | 'down') =>
+    api.post<RatingResponse>(`/ai/chat/${chatId}/messages/${msgIndex}/rate`, { rating }),
+
+  getChatRatings: (chatId: string) =>
+    api.get<{ chatId: string; ratings: Record<number, 'up' | 'down'> }>(
+      `/ai/chat/${chatId}/ratings`,
+    ),
+
+  getAdminStats: () => api.get<AdminStats>('/ai/admin/stats'),
 };

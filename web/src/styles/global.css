@@ -707,3 +707,114 @@ input, textarea, select {
 }
 .kb-result-title { font-weight: 600; margin: 0 0 4px; }
 .kb-result-snippet { font-size: 13px; color: var(--text-muted); margin: 0; }
+
+/* === Admin gear in topnav === */
+.topnav-admin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: background .15s ease, color .15s ease;
+}
+.topnav-admin:hover {
+  background: var(--surface-2);
+  color: var(--brand-primary);
+  text-decoration: none;
+}
+
+/* === AI message rating buttons (hover-only) === */
+.msg-rate {
+  display: flex;
+  gap: 2px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.msg-bubble:hover .msg-rate,
+.msg-rate:focus-within {
+  opacity: 1;
+}
+.msg-rate button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: background .12s ease, color .12s ease, transform .12s ease;
+}
+.msg-rate button:hover {
+  background: var(--surface-2);
+  transform: translateY(-1px);
+}
+.msg-rate button.active {
+  color: var(--brand-primary);
+  background: var(--brand-primary-light);
+}
+
+/* === Admin page === */
+.admin-page h2 { margin-bottom: 4px; }
+.admin-page h3 {
+  margin-top: 32px;
+  margin-bottom: 12px;
+  font-size: 16px;
+  color: var(--text);
+}
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  text-align: center;
+}
+.stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--brand-primary);
+  line-height: 1.2;
+}
+.stat-label {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.stat-card.stat-good .stat-num { color: var(--success); }
+.stat-card.stat-bad  .stat-num { color: var(--danger); }
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  font-size: 13px;
+}
+.admin-table th,
+.admin-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.admin-table th {
+  background: var(--surface-2);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table tr:hover td { background: var(--bg); }
+.rate-up   { color: var(--success); font-size: 16px; }
+.rate-down { color: var(--danger);  font-size: 16px; }

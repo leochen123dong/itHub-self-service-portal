@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config.js';
 import { requireSession } from '../session/middleware.js';
+import { requireAdmin } from '../middleware/admin.js';
 import { chatCompletion } from '../ai/minimax.js';
 import { buildKbContext } from '../ai/kbContext.js';
 import {
@@ -11,6 +12,7 @@ import {
   listChats,
   toMiniMaxHistory,
 } from '../ai/chatStore.js';
+import { getChatRatings, getStats, rateMessage, type Rating } from '../ai/ratingStore.js';
 
 interface ChatMessage {
   Role: 'User' | 'Assistant' | string;
@@ -181,10 +183,12 @@ aiRouter.get('/chat/:chatId/messages', requireSession, (req, res): void => {
     });
     return;
   }
+  const ratings = getChatRatings(req.params.chatId);
   res.json({
-    Messages: chat.messages.map((m) => ({
+    Messages: chat.messages.map((m, idx) => ({
       Role: m.role === 'user' ? 'User' : 'Assistant',
       Content: m.content,
+      Rating: m.role === 'assistant' ? ratings[idx] ?? null : undefined,
     })),
     SuggestedActions: chat.messages.length === 0 ? STARTER_SUGGESTIONS : POST_REPLY_SUGGESTIONS,
   });
@@ -206,4 +210,89 @@ aiRouter.get('/chats', requireSession, (req, res): void => {
       UpdatedUtc: new Date(c.updatedAt).toISOString(),
     })),
   );
+});
+
+// POST /api/ai/chat/:chatId/messages/:msgIndex/rate
+// Body: { rating: 'up' | 'down' }
+aiRouter.post('/chat/:chatId/messages/:msgIndex/rate', requireSession, (req, res): void => {
+  const { chatId } = req.params;
+  const msgIndex = parseInt(req.params.msgIndex, 10);
+  const { rating } = req.body ?? {};
+
+  if (!rating || (rating !== 'up' && rating !== 'down')) {
+    res.status(400).json({
+      error: { code: 'INVALID_RATING', message_zh: 'rating 必须为 up 或 down' },
+    });
+    return;
+  }
+  if (!Number.isFinite(msgIndex) || msgIndex < 0) {
+    res.status(400).json({
+      error: { code: 'INVALID_INDEX', message_zh: 'msgIndex 不合法' },
+    });
+    return;
+  }
+
+  const chat = getChat(chatId);
+  if (!chat) {
+    res.status(404).json({
+      error: { code: 'CHAT_NOT_FOUND', message_zh: '对话不存在或已过期' },
+    });
+    return;
+  }
+  if (chat.userId !== req.session!.userId) {
+    res.status(403).json({
+      error: { code: 'FORBIDDEN', message_zh: '无权访问该对话' },
+    });
+    return;
+  }
+  if (msgIndex >= chat.messages.length) {
+    res.status(400).json({
+      error: { code: 'INDEX_OUT_OF_RANGE', message_zh: '消息索引超出范围' },
+    });
+    return;
+  }
+  // Only assistant messages can be rated.
+  if (chat.messages[msgIndex].role !== 'assistant') {
+    res.status(400).json({
+      error: { code: 'NOT_ASSISTANT', message_zh: '只能给 AI 消息评分' },
+    });
+    return;
+  }
+
+  const record = rateMessage({
+    chatId,
+    msgIndex,
+    rating: rating as Rating,
+    userId: req.session!.userId,
+    userName: req.session!.userName,
+  });
+  res.json({
+    chatId: record.chatId,
+    msgIndex: record.msgIndex,
+    rating: record.rating,
+    at: record.at,
+  });
+});
+
+// GET /api/ai/chat/:chatId/ratings — restore rating UI state after page reload
+aiRouter.get('/chat/:chatId/ratings', requireSession, (req, res): void => {
+  const chat = getChat(req.params.chatId);
+  if (!chat) {
+    res.status(404).json({
+      error: { code: 'CHAT_NOT_FOUND', message_zh: '对话不存在或已过期' },
+    });
+    return;
+  }
+  if (chat.userId !== req.session!.userId) {
+    res.status(403).json({
+      error: { code: 'FORBIDDEN', message_zh: '无权访问该对话' },
+    });
+    return;
+  }
+  res.json({ chatId: req.params.chatId, ratings: getChatRatings(req.params.chatId) });
+});
+
+// GET /api/ai/admin/stats — aggregate rating metrics
+aiRouter.get('/admin/stats', requireSession, requireAdmin, (_req, res): void => {
+  res.json(getStats());
 });

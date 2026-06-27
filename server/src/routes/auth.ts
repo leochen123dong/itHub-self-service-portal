@@ -4,6 +4,7 @@ import { ITHubError } from '../http/errors.js';
 import { config } from '../config.js';
 import { createSession, deleteSession } from '../session/store.js';
 import { requireSession } from '../session/middleware.js';
+import { isAdmin } from '../middleware/admin.js';
 
 export const authRouter = Router();
 
@@ -79,6 +80,7 @@ authRouter.get('/me', requireSession, (req, res) => {
     userName: s.userName,
     identity: s.identity,
     customerTag: s.customerTag,
+    isAdmin: isAdmin(s.userName),
   });
 });
 

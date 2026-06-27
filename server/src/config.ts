@@ -68,6 +68,14 @@ export const config = {
     cookieSameSite: 'none' as 'none' | 'lax',
     cookieSecure: true,
   },
+
+  admin: {
+    // Comma-separated list of ITHub identities allowed to view /api/ai/admin/*.
+    identities: (process.env.ADMIN_IDENTITY ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
 };
 
 export type AppConfig = typeof config;

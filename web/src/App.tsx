@@ -12,6 +12,7 @@ import { ChatPage } from './pages/ChatPage';
 import { KbPage } from './pages/KbPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { TicketsPage } from './pages/TicketsPage';
+import { AdminPage } from './pages/AdminPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const status = useAuthStore((s) => s.status);
@@ -45,6 +46,7 @@ export default function App() {
                 <Route path="/catalog/:id" element={<CatalogPage />} />
                 <Route path="/tickets" element={<TicketsPage />} />
                 <Route path="/tickets/:id" element={<TicketsPage />} />
+                <Route path="/admin" element={<AdminPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </RequireAuth>
