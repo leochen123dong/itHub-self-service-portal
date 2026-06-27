@@ -20,6 +20,7 @@ export function TicketsPage() {
   const [journals, setJournals] = useState<TicketJournal[]>([]);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   const loadList = async () => {
     setLoading(true);
@@ -34,8 +35,8 @@ export function TicketsPage() {
     }
   };
 
-  const loadDetail = async (id: string) => {
-    setLoading(true);
+  const loadDetail = async (id: string, silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [t, js] = await Promise.all([
@@ -44,16 +45,23 @@ export function TicketsPage() {
       ]);
       setDetail(t as Ticket);
       setJournals(Array.isArray(js) ? js : []);
+      setLastRefreshed(new Date());
     } catch (e: any) {
       setError(e instanceof ApiError ? e.message : '加载失败');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (routeId) loadDetail(routeId);
-    else loadList();
+    if (routeId) {
+      loadDetail(routeId);
+      // Poll every 20s while the detail page is open so admin-side edits
+      // (assignee, state, journals) propagate without a manual reload.
+      const tick = setInterval(() => loadDetail(routeId, true), 20_000);
+      return () => clearInterval(tick);
+    }
+    loadList();
   }, [routeId]);
 
   const handleAddComment = async () => {
@@ -110,8 +118,35 @@ export function TicketsPage() {
             </div>
             <div>
               <div className="field-label">处理人</div>
-              <div>{detail.AssignedUser?.UserName || '未分配'}</div>
+              <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                {detail.AssignedUser?.UserName ? (
+                  <>
+                    <span
+                      className="online-dot"
+                      data-online={detail.AssignedUser.IsOnline ? '1' : '0'}
+                    />
+                    <span style={{ color: detail.AssignedUser.HtmlColor || 'inherit' }}>
+                      {detail.AssignedUser.UserName}
+                    </span>
+                  </>
+                ) : (
+                  '未分配'
+                )}
+              </div>
             </div>
+          </div>
+          <div className="row" style={{ justifyContent: 'space-between', marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+            <span>
+              {lastRefreshed
+                ? `最后同步：${lastRefreshed.toLocaleTimeString('zh-CN', { hour12: false })} · 每 20s 自动刷新`
+                : '加载中…'}
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => loadDetail(String(detail.TicketId))}
+            >
+              立即刷新
+            </button>
           </div>
         </div>
 

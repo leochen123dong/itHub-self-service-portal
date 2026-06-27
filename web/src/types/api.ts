@@ -113,7 +113,16 @@ export interface Ticket {
   CreatedLocalTime?: string;
   CustomerName?: string;
   AssignedUserGroup?: { Name?: string; UserGroupId?: number };
-  AssignedUser?: { UserName?: string; UserId?: number };
+  // ITHub user fields passed through so the UI can show per-user color and
+  // online status. Field names mirror the priority pattern above.
+  AssignedUser?: {
+    UserName?: string;
+    Name?: string;
+    UserId?: number;
+    HtmlColor?: string;
+    IsOnline?: boolean;
+    Presence?: string;
+  };
   IncidentState?: string | number;
   TicketCategory?: { Name?: string };
   TicketDetail?: any;
