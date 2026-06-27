@@ -109,7 +109,7 @@ export async function chatCompletion(opts: MiniMaxChatOptions): Promise<MiniMaxC
         502,
         'MINIMAX_EMPTY',
         'MiniMax 返回为空，请稍后再试',
-        JSON.stringify(json).slice(0, 300),
+        (JSON.stringify(json ?? null) || '').slice(0, 300),
       );
     }
     return { content: String(content), raw: json };

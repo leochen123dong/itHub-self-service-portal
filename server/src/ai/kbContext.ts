@@ -108,7 +108,8 @@ export async function buildKbContext(
   }
 
   // Log the raw response shape so we can see what ITHub actually returns
-  const rawSample = typeof raw === 'string' ? raw.slice(0, 200) : JSON.stringify(raw).slice(0, 200);
+  const rawStringified = typeof raw === 'string' ? raw : JSON.stringify(raw ?? null);
+  const rawSample = rawStringified.slice(0, 200);
   console.log(`[kb] EmbeddingSearch raw: ${rawSample}`);
 
   const list: KbSearchResult[] = Array.isArray(raw)
