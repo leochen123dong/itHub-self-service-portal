@@ -212,10 +212,19 @@ async function keywordSearch(
   // it scored, even if it doesn't make top 5.
   const target = allScored.find((s) => pickId(s.article) === 100071);
   if (target) {
+    const title = pickTitle(target.article);
+    const summary = target.article.Summary || '';
     console.log(
-      `[kb] target K100071 score=${target.score} title="${pickTitle(target.article)}" ` +
-      `summaryLen=${(target.article.Summary || '').length} descTextLen=${(target.article.DescriptionText || '').length}`,
+      `[kb] target K100071 raw_title=${JSON.stringify(title)} ` +
+      `raw_summary=${JSON.stringify(summary)} ` +
+      `raw_tokens=${JSON.stringify(tokens)}`,
     );
+    for (const t of tokens) {
+      const inTitle = title.includes(t);
+      const inSummary = summary.includes(t);
+      console.log(`[kb]   token=${JSON.stringify(t)} inTitle=${inTitle} inSummary=${inSummary}`);
+    }
+    console.log(`[kb] target K100071 score=${target.score}`);
   } else {
     console.log('[kb] K100071 not in listAllArticles result');
   }
