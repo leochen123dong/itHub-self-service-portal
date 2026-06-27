@@ -208,15 +208,25 @@ async function keywordSearch(
     .map((r) => ({ article: r, score: scoreArticle(r, tokens) }))
     .sort((a, b) => b.score - a.score);
 
-  const scored = allScored.filter((s) => s.score > 0).slice(0, topK);
+  const candidates = allScored.filter((s) => s.score > 0).slice(0, topK);
 
   // Diagnostic: log which fields are actually populated so we can debug
   // why pickBody sometimes returns a near-empty string.
   console.log(
     `[kb] keyword tokens=${JSON.stringify(tokens)} ` +
-    `picked=${scored.length} ` +
+    `candidates=${candidates.length} ` +
     `topScores=${JSON.stringify(allScored.slice(0, 3).map((s) => ({ title: pickTitle(s.article), score: s.score })))}`,
   );
+
+  // The list endpoint returns summaries without bodies — fetch full content
+  // for each candidate via /KnowledgeArticles/:id.
+  const scored: Array<{ article: KbArticle; score: number }> = [];
+  for (const c of candidates) {
+    const id = pickId(c.article);
+    if (typeof id !== 'number') continue;
+    const full = await fetchArticleBody(accessToken, id, c.article);
+    scored.push({ article: full, score: c.score });
+  }
   if (scored.length > 0) {
     const sample = scored[0].article;
     console.log(
@@ -324,4 +334,22 @@ function extractArticleList(raw: any): KbArticle[] {
   return (
     raw?.Results ?? raw?.results ?? raw?.Items ?? raw?.items ?? raw?.Data ?? raw?.Articles ?? []
   );
+}
+
+async function fetchArticleBody(
+  accessToken: string,
+  articleId: number,
+  fallback: KbArticle,
+): Promise<KbArticle> {
+  try {
+    const data = await ithubFetch<any>(`/api/Knowledge/KnowledgeArticles/${articleId}`, {
+      accessToken,
+    });
+    if (data && typeof data === 'object') {
+      return { ...fallback, ...data };
+    }
+  } catch (err) {
+    console.warn(`[kb] fetchArticleBody ${articleId} failed:`, (err as Error).message);
+  }
+  return fallback;
 }
