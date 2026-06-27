@@ -42,11 +42,23 @@ ticketsRouter.get('/', requireSession, async (req, res): Promise<void> => {
   }
 });
 
+// ITHub returns more populated ticket objects (assigned user, color, online
+// status) when both the tenant ApiKey AND the user AccessToken are sent.
+// Without the ApiKey the assigned-user fields are stripped.
 ticketsRouter.get('/:id', requireSession, async (req, res): Promise<void> => {
+  if (!config.ithub.apiKey) {
+    res.status(500).json({
+      error: { code: 'NO_API_KEY', message_zh: '服务端未配置 ITHUB_API_KEY' },
+    });
+    return;
+  }
   try {
     const data = await ithubFetch<any>(
       `/api/ServiceDesk/Tickets/${req.params.id}`,
-      { accessToken: req.session!.accessToken },
+      {
+        accessToken: req.session!.accessToken,
+        apiKey: config.ithub.apiKey,
+      },
     );
     res.json(data);
   } catch (e) {
@@ -56,10 +68,19 @@ ticketsRouter.get('/:id', requireSession, async (req, res): Promise<void> => {
 });
 
 ticketsRouter.get('/:id/journals', requireSession, async (req, res): Promise<void> => {
+  if (!config.ithub.apiKey) {
+    res.status(500).json({
+      error: { code: 'NO_API_KEY', message_zh: '服务端未配置 ITHUB_API_KEY' },
+    });
+    return;
+  }
   try {
     const data = await ithubFetch<any>(
       `/api/ServiceDesk/Tickets/${req.params.id}/TicketJournals`,
-      { accessToken: req.session!.accessToken },
+      {
+        accessToken: req.session!.accessToken,
+        apiKey: config.ithub.apiKey,
+      },
     );
     res.json(data);
   } catch (e) {
