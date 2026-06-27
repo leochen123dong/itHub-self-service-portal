@@ -172,9 +172,7 @@ async function tryEmbeddingSearch(
     const sample = (typeof raw === 'string' ? raw : JSON.stringify(raw ?? null) || '').slice(0, 200);
     console.log(`[kb] EmbeddingSearch payload=${JSON.stringify(body)} raw: ${sample}`);
 
-    const list: KbSearchResult[] = Array.isArray(raw)
-      ? raw
-      : raw?.Results ?? raw?.results ?? raw?.Items ?? raw?.items ?? raw?.Data ?? raw?.Articles ?? [];
+    const list = extractArticleList(raw);
     if (!Array.isArray(list) || list.length === 0) continue;
 
     return list
@@ -196,21 +194,9 @@ async function keywordSearch(
   query: string,
   topK: number,
 ): Promise<Array<{ id: number | undefined; title: string; body: string; score?: number }>> {
-  let raw: any;
-  try {
-    raw = await ithubFetch<any>(
-      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
-      { accessToken },
-    );
-  } catch (err) {
-    console.warn('[kb] KnowledgeArticles list failed:', (err as Error).message);
-    return [];
-  }
-  const list: KbArticle[] = Array.isArray(raw)
-    ? raw
-    : raw?.Results ?? raw?.results ?? raw?.Items ?? raw?.items ?? raw?.Data ?? raw?.Articles ?? [];
-  if (!Array.isArray(list) || list.length === 0) {
-    console.log(`[kb] KnowledgeArticles returned ${Array.isArray(list) ? list.length : 'non-array'}`);
+  const list = await listAllArticles(accessToken, kbId);
+  if (list.length === 0) {
+    console.log('[kb] KnowledgeArticles returned 0 articles');
     return [];
   }
   console.log(`[kb] keyword search over ${list.length} articles`);
@@ -290,4 +276,75 @@ function countOccurrences(haystack: string, needle: string): number {
     if (count > 100) break;
   }
   return count;
+}
+
+/**
+ * ITHub's /KnowledgeArticles endpoint defaults to a small page (10) which
+ * drops recently added articles (e.g. K100071). Page through with pageSize=100
+ * and dedupe by KnowledgeArticleId so we cover the whole KB.
+ */
+async function listAllArticles(accessToken: string, kbId: number): Promise<KbArticle[]> {
+  const out: KbArticle[] = [];
+  const seen = new Set<number>();
+  const pageSize = 100;
+
+  // Try a single call with pageSize=100 first — if ITHub honors it, we
+  // avoid multiple round trips.
+  for (let attempt = 0; attempt < 1; attempt++) {
+    try {
+      const raw = await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+        { accessToken, query: { pageSize } },
+      );
+      const page: KbArticle[] = extractArticleList(raw);
+      for (const a of page) {
+        const id = pickId(a);
+        if (typeof id === 'number' && !seen.has(id)) {
+          seen.add(id);
+          out.push(a);
+        }
+      }
+      if (page.length < pageSize) {
+        console.log(`[kb] listAllArticles got ${out.length} articles in one page (pageSize=${pageSize})`);
+        return out;
+      }
+    } catch (err) {
+      console.warn('[kb] paged KnowledgeArticles failed:', (err as Error).message);
+      return out;
+    }
+  }
+
+  // Page through if the first call returned a full page.
+  let page = 1;
+  while (page < 50) {
+    try {
+      const raw = await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+        { accessToken, query: { pageSize, page } },
+      );
+      const list: KbArticle[] = extractArticleList(raw);
+      if (list.length === 0) break;
+      for (const a of list) {
+        const id = pickId(a);
+        if (typeof id === 'number' && !seen.has(id)) {
+          seen.add(id);
+          out.push(a);
+        }
+      }
+      if (list.length < pageSize) break;
+      page += 1;
+    } catch (err) {
+      console.warn(`[kb] KnowledgeArticles page=${page} failed:`, (err as Error).message);
+      break;
+    }
+  }
+  console.log(`[kb] listAllArticles returned ${out.length} unique articles across ${page} pages`);
+  return out;
+}
+
+function extractArticleList(raw: any): KbArticle[] {
+  if (Array.isArray(raw)) return raw;
+  return (
+    raw?.Results ?? raw?.results ?? raw?.Items ?? raw?.items ?? raw?.Data ?? raw?.Articles ?? []
+  );
 }
