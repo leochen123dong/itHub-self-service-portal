@@ -32,6 +32,11 @@ export const config = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+  // Cross-site cookies (e.g. GH Pages → Render) need SameSite=None; Secure.
+  // Local dev over HTTP can't satisfy Secure, so fall back to Lax.
+  hasLocalhostOrigin: (process.env.WEB_ORIGIN ?? 'http://localhost:5173')
+    .split(',')
+    .some((s) => s.includes('localhost')),
 
   ithub: {
     baseUrl: required('ITHUB_BASE_URL', 'https://demo.logicalisservice.com'),
@@ -56,6 +61,9 @@ export const config = {
   session: {
     cookieName: process.env.SESSION_COOKIE_NAME ?? 'sid',
     ttlHours: intEnv('SESSION_TTL_HOURS', 8),
+    // Set in index.ts from the hasLocalhostOrigin check above.
+    cookieSameSite: 'none' as 'none' | 'lax',
+    cookieSecure: true,
   },
 };
 

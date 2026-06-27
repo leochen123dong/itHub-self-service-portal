@@ -37,7 +37,8 @@ authRouter.post('/login', async (req, res): Promise<void> => {
     });
     res.cookie(config.session.cookieName, sid, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: config.session.cookieSameSite,
+      secure: config.session.cookieSecure,
       maxAge: config.session.ttlHours * 3600_000,
       path: '/',
     });

@@ -13,6 +13,13 @@ import { ticketsRouter } from './routes/tickets.js';
 
 const app = express();
 
+// Cookie attributes: cross-site (GH Pages → Render) needs SameSite=None; Secure.
+// Local dev over HTTP can't satisfy Secure, so fall back to Lax.
+if (config.hasLocalhostOrigin) {
+  config.session.cookieSameSite = 'lax';
+  config.session.cookieSecure = false;
+}
+
 const allowedOrigins = config.webOrigins;
 const isOriginAllowed = (origin: string | undefined): boolean => {
   if (!origin) return true; // same-origin / curl / server-to-server
