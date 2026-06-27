@@ -76,10 +76,17 @@ export async function buildKbContext(
   query: string,
   topK = 3,
 ): Promise<string> {
-  if (!query || !query.trim()) return '';
+  if (!query || !query.trim()) {
+    console.log('[kb] empty query, skip');
+    return '';
+  }
   const customerTag = config.ithub.customerTag;
   const kbId = await resolveKbId(accessToken, customerTag);
-  if (!kbId) return '';
+  if (!kbId) {
+    console.warn(`[kb] no KB available for customerTag=${customerTag}`);
+    return '';
+  }
+  console.log(`[kb] querying kbId=${kbId} query="${query.slice(0, 60)}"`);
 
   let raw: any;
   try {
@@ -92,22 +99,34 @@ export async function buildKbContext(
       },
     );
   } catch (err) {
-    // Surface non-404 errors so we can see them in logs, but don't break chat
     if (!(err instanceof ITHubError) || err.status !== 404) {
       console.warn('[kb] EmbeddingSearch failed:', (err as Error).message);
+    } else {
+      console.warn(`[kb] kbId=${kbId} not found or has no embeddings`);
     }
     return '';
   }
 
+  // Log the raw response shape so we can see what ITHub actually returns
+  const rawSample = typeof raw === 'string' ? raw.slice(0, 200) : JSON.stringify(raw).slice(0, 200);
+  console.log(`[kb] EmbeddingSearch raw: ${rawSample}`);
+
   const list: KbSearchResult[] = Array.isArray(raw)
     ? raw
-    : raw?.Results ?? raw?.results ?? raw?.Items ?? raw?.items ?? raw?.Data ?? [];
-  if (!list.length) return '';
+    : raw?.Results ?? raw?.results ?? raw?.Items ?? raw?.items ?? raw?.Data ?? raw?.Articles ?? [];
+  console.log(`[kb] parsed ${Array.isArray(list) ? list.length : 'non-array'} results`);
+  if (!Array.isArray(list) || list.length === 0) return '';
 
   const picked = list
-    .map((r) => ({ id: pickId(r), title: pickTitle(r), body: pickBody(r), score: r.Score ?? r.RelevanceScore }))
+    .map((r) => ({
+      id: pickId(r),
+      title: pickTitle(r),
+      body: pickBody(r),
+      score: r.Score ?? r.RelevanceScore,
+    }))
     .filter((r) => r.body || r.title)
     .slice(0, topK);
+  console.log(`[kb] picked ${picked.length} articles with content`);
   if (!picked.length) return '';
 
   const blocks = picked
