@@ -79,6 +79,9 @@ aiRouter.post('/chat/init', requireSession, async (req, res): Promise<void> => {
   if (initialMessage) {
     try {
       const kbContext = await buildKbContext(session.accessToken, initialMessage, 5);
+      if (kbContext) {
+        console.log(`[kb] injected context length=${kbContext.length}`);
+      }
       const reply = await chatCompletion({
         messages: toMiniMaxHistory(chat),
         extraSystem: kbContext ? [kbContext] : [],
@@ -127,6 +130,11 @@ aiRouter.post('/chat/message', requireSession, async (req, res): Promise<void> =
   appendUserMessage(aiChatId, content);
   try {
     const kbContext = await buildKbContext(req.session!.accessToken, content, 5);
+    if (kbContext) {
+      // Diagnostic: log exactly which articles we fed the model so we can
+      // tell whether the model ignored them or we never sent the right ones.
+      console.log(`[kb] injected context length=${kbContext.length}`);
+    }
     const reply = await chatCompletion({
       messages: toMiniMaxHistory(getChat(aiChatId)!),
       extraSystem: kbContext ? [kbContext] : [],
