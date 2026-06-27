@@ -204,15 +204,19 @@ async function keywordSearch(
   const tokens = tokenize(query);
   if (!tokens.length) return [];
 
-  const scored = list
+  const allScored = list
     .map((r) => ({ article: r, score: scoreArticle(r, tokens) }))
-    .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
+    .sort((a, b) => b.score - a.score);
+
+  const scored = allScored.filter((s) => s.score > 0).slice(0, topK);
 
   // Diagnostic: log which fields are actually populated so we can debug
   // why pickBody sometimes returns a near-empty string.
-  console.log(`[kb] keyword tokens=${JSON.stringify(tokens)} picked=${scored.length}`);
+  console.log(
+    `[kb] keyword tokens=${JSON.stringify(tokens)} ` +
+    `picked=${scored.length} ` +
+    `topScores=${JSON.stringify(allScored.slice(0, 3).map((s) => ({ title: pickTitle(s.article), score: s.score })))}`,
+  );
   if (scored.length > 0) {
     const sample = scored[0].article;
     console.log(
