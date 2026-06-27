@@ -80,7 +80,7 @@ authRouter.get('/me', requireSession, (req, res) => {
     userName: s.userName,
     identity: s.identity,
     customerTag: s.customerTag,
-    isAdmin: isAdmin(s.userName),
+    isAdmin: isAdmin(s.userName, s.identity),
   });
 });
 
