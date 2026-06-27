@@ -115,12 +115,14 @@ export async function buildKbContext(
   console.log(`[kb] picked ${picked.length} articles with content`);
   const blocks = picked
     .map((r, i) => {
-      const body = r.body.length > 400 ? r.body.slice(0, 400) + '…' : r.body;
-      return `[${i + 1}] ${r.title}${body ? `\n${body}` : ''}`;
+      // Keep the full body — MiniMax-Text-01 has plenty of context room, and
+      // specifics like server addresses / node names usually live deep in the
+      // article. Truncating here was throwing away the answer.
+      return `[${i + 1}] ${r.title}\n${r.body}`;
     })
     .join('\n\n');
 
-  return `以下是企业内部知识库的检索结果，请优先基于这些内容回答。如果知识库没有覆盖，再用通用 IT 知识补充。引用知识库内容时只用 [1]、[2] 这样的纯数字编号，不要加 KB、文章 ID、链接等任何前缀。\n\n${blocks}\n\n---\n请用中文回答，基于上述知识库内容回答用户问题；在合适的位置用 [1]、[2] 标注引用来源，文末不要再写引用说明。`;
+  return `以下是企业内部知识库的检索结果，请严格基于这些内容回答用户问题，**直接引用其中的具体节点名、服务器地址、URL、端口号、步骤编号等细节**，不要用自己的通用 IT 知识改写或概括——这些是企业内部真实信息。如果知识库没有覆盖，再补充通用建议。引用时只用 [1]、[2] 这样的纯数字编号，不要加 KB、文章 ID、链接等任何前缀。\n\n${blocks}\n\n---\n请用中文回答；基于上述知识库内容回答用户问题，在合适的位置用 [1]、[2] 标注引用来源，文末不要再写引用说明。`;
 }
 
 async function tryEmbeddingSearch(

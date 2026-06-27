@@ -78,7 +78,7 @@ aiRouter.post('/chat/init', requireSession, async (req, res): Promise<void> => {
   let messages: ChatMessage[] = [];
   if (initialMessage) {
     try {
-      const kbContext = await buildKbContext(session.accessToken, initialMessage);
+      const kbContext = await buildKbContext(session.accessToken, initialMessage, 5);
       const reply = await chatCompletion({
         messages: toMiniMaxHistory(chat),
         extraSystem: kbContext ? [kbContext] : [],
@@ -126,7 +126,7 @@ aiRouter.post('/chat/message', requireSession, async (req, res): Promise<void> =
 
   appendUserMessage(aiChatId, content);
   try {
-    const kbContext = await buildKbContext(req.session!.accessToken, content);
+    const kbContext = await buildKbContext(req.session!.accessToken, content, 5);
     const reply = await chatCompletion({
       messages: toMiniMaxHistory(getChat(aiChatId)!),
       extraSystem: kbContext ? [kbContext] : [],
