@@ -247,6 +247,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const detail = await catalogApi.get(templateId);
       templateDetail = detail as unknown as Record<string, unknown>;
       console.log('[ticket] template detail keys:', Object.keys(detail ?? {}));
+      // The form config is the source of truth for required input fields.
+      // The create endpoint may reject the ticket silently (404) when these
+      // are missing.
+      console.log('[ticket] UserInputFormConfig:', (detail as any)?.UserInputFormConfig);
+      console.log('[ticket] TicketTemplateConfig:', (detail as any)?.TicketTemplateConfig);
+      console.log('[ticket] Script:', (detail as any)?.Script);
     } catch (e) {
       console.warn('[ticket] catalog.get failed:', (e as Error)?.message);
     }
