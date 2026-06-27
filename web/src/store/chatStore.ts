@@ -19,7 +19,11 @@ async function resolveTemplateId(): Promise<number | null> {
     }
     // Dump full list to console so misclassifications are visible at a glance.
     console.log(
-      '[ticket] catalog templates:',
+      '[ticket] catalog templates (first 5):',
+      templates.slice(0, 5),
+    );
+    console.log(
+      '[ticket] catalog summary:',
       templates.map((t) => ({
         id: t.TicketTemplateId,
         name: t.Name,
@@ -219,13 +223,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error('未找到可用的工单模板');
     }
 
-    const payload = {
+    // Fetch the full template detail so we can spread its TenantId /
+    // OwnerUserGroup / AssignedUserGroup into the create payload. The list
+    // endpoint returns a stripped-down object that ITHub rejects with 404
+    // when used as a ticket-create payload, even with a valid
+    // TicketTemplateId. The single-template GET returns the fields needed
+    // for creation.
+    let templateDetail: Record<string, unknown> | undefined;
+    try {
+      const detail = await catalogApi.get(templateId);
+      templateDetail = detail as unknown as Record<string, unknown>;
+      console.log('[ticket] template detail keys:', Object.keys(detail ?? {}));
+    } catch (e) {
+      console.warn('[ticket] catalog.get failed:', (e as Error)?.message);
+    }
+
+    const payload: Record<string, unknown> = {
       ...(preFilled ?? {}),
+      ...(templateDetail ?? {}),
       TicketTemplateId: templateId,
       Summary: finalDesc.slice(0, 200),
       Description: finalDesc,
     };
-    console.log('[ticket] creating with templateId=', templateId);
+    console.log('[ticket] creating with templateId=', templateId, 'payload keys:', Object.keys(payload));
 
     try {
       const created = await ticketsApi.create(payload);

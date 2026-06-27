@@ -40,6 +40,19 @@ catalogRouter.get('/:id/menu', requireSession, async (req, res): Promise<void> =
   }
 });
 
+catalogRouter.get('/:id', requireSession, async (req, res): Promise<void> => {
+  try {
+    const data = await ithubFetch<any>(
+      `/api/ServiceDesk/TicketTemplates/${req.params.id}`,
+      { accessToken: req.session!.accessToken },
+    );
+    res.json(data);
+  } catch (e) {
+    const { status, body } = err(e, '获取模板详情失败');
+    res.status(status).json(body);
+  }
+});
+
 catalogRouter.get('/:id/config', requireSession, async (req, res): Promise<void> => {
   try {
     const data = await ithubFetch<any>(
