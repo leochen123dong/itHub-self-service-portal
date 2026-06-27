@@ -101,10 +101,14 @@ export async function chatCompletion(opts: MiniMaxChatOptions): Promise<MiniMaxC
     }
     const content =
       json?.choices?.[0]?.message?.content ??
+      json?.choices?.[0]?.text ??
       json?.reply ??
       json?.message?.content ??
       '';
     if (!content) {
+      // Diagnostic — log the raw payload so we can see exactly why MiniMax
+      // returned no text (content_filtered? reasoning-only? safety block?).
+      console.warn('[minimax] empty content. raw=', JSON.stringify(json ?? null).slice(0, 800));
       throw new ITHubError(
         502,
         'MINIMAX_EMPTY',
