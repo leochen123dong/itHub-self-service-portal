@@ -208,27 +208,6 @@ async function keywordSearch(
     .map((r) => ({ article: r, score: scoreArticle(r, tokens) }))
     .sort((a, b) => b.score - a.score);
 
-  // Find K100071 specifically so we can see if it's in the list and what
-  // it scored, even if it doesn't make top 5.
-  const target = allScored.find((s) => pickId(s.article) === 100071);
-  if (target) {
-    const title = pickTitle(target.article);
-    const summary = target.article.Summary || '';
-    console.log(
-      `[kb] target K100071 raw_title=${JSON.stringify(title)} ` +
-      `raw_summary=${JSON.stringify(summary)} ` +
-      `raw_tokens=${JSON.stringify(tokens)}`,
-    );
-    for (const t of tokens) {
-      const inTitle = title.includes(t);
-      const inSummary = summary.includes(t);
-      console.log(`[kb]   token=${JSON.stringify(t)} inTitle=${inTitle} inSummary=${inSummary}`);
-    }
-    console.log(`[kb] target K100071 score=${target.score}`);
-  } else {
-    console.log('[kb] K100071 not in listAllArticles result');
-  }
-
   const candidates = allScored.filter((s) => s.score > 0).slice(0, topK);
 
   // Diagnostic: log which fields are actually populated so we can debug
@@ -275,12 +254,31 @@ const STOP_WORDS = new Set([
 ]);
 
 function tokenize(text: string): string[] {
-  // Split on whitespace + Chinese punctuation; keep alphanumeric and CJK runs.
+  // CJK substring search: emit every adjacent 2-character pair from each
+  // Chinese run, plus any alphanumeric tokens. Per-character 1-grams are
+  // intentionally omitted — single characters are too generic and would
+  // cause cross-talk (e.g. "如" matching many articles).
   const segments = text
     .replace(/[，。！？、；：""''《》【】()()\.,!?;:"'()\[\]]/g, ' ')
     .split(/\s+/)
-    .flatMap((s) => s.match(/[A-Za-z0-9]+|[一-龥]+/g) ?? []);
-  return segments.map((s) => s.toLowerCase()).filter((s) => s.length > 0 && !STOP_WORDS.has(s));
+    .filter(Boolean);
+  const out: string[] = [];
+  for (const seg of segments) {
+    const alphanumeric = seg.match(/[A-Za-z0-9]+/g);
+    if (alphanumeric) out.push(...alphanumeric);
+    const cjk = seg.match(/[一-龥]/g);
+    if (cjk && cjk.length >= 2) {
+      for (let i = 0; i < cjk.length - 1; i += 1) {
+        out.push(cjk[i] + cjk[i + 1]);
+      }
+    } else if (cjk && cjk.length === 1) {
+      // Single CJK character — keep it but with reduced weight downstream.
+      out.push(cjk[0]);
+    }
+  }
+  return out
+    .map((s) => s.toLowerCase())
+    .filter((s) => s.length > 0 && !STOP_WORDS.has(s));
 }
 
 function scoreArticle(r: KbArticle, tokens: string[]): number {
@@ -292,11 +290,16 @@ function scoreArticle(r: KbArticle, tokens: string[]): number {
   let score = 0;
   for (const t of tokens) {
     if (!t) continue;
-    if (title.includes(t)) score += 5;
-    if (summary.includes(t)) score += 3;
-    // Cap body hits so one huge article doesn't dominate
-    const bodyHits = countOccurrences(body, t);
-    if (bodyHits > 0) score += Math.min(bodyHits, 5);
+    const isSingleChar = t.length === 1;
+    const titleW = isSingleChar ? 1 : 8;
+    const summaryW = isSingleChar ? 1 : 4;
+    const bodyW = isSingleChar ? 0 : 1;
+    if (title.includes(t)) score += titleW;
+    if (summary.includes(t)) score += summaryW;
+    if (bodyW > 0) {
+      const bodyHits = countOccurrences(body, t);
+      if (bodyHits > 0) score += Math.min(bodyHits, 5) * bodyW;
+    }
   }
   return score;
 }
