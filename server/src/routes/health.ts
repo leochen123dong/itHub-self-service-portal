@@ -113,6 +113,37 @@ healthRouter.get('/debug/kb/:id/probe-paging', requireSession, async (req, res):
   res.json({ kbId, variants: out });
 });
 
+healthRouter.get('/debug/kb/:id/all-articles', requireSession, async (req, res): Promise<void> => {
+  try {
+    const kbId = parseInt(req.params.id, 10);
+    const data = await ithubFetch<any>(`/api/Knowledge/KnowledgeArticles`, {
+      accessToken: req.session!.accessToken,
+      query: { KnowledgeBaseId: kbId },
+    });
+    const list: any[] = Array.isArray(data)
+      ? data
+      : data?.Results ?? data?.results ?? data?.Items ?? data?.items ?? data?.Data ?? data?.Articles ?? [];
+    res.json({
+      kbId,
+      count: list.length,
+      articles: list.map((a: any) => ({
+        KnowledgeArticleId: a.KnowledgeArticleId ?? a.Id,
+        Identifier: a.Identifier,
+        CustomerTag: a.CustomerTag,
+        CustomerId: a.CustomerId,
+        Summary: a.Summary,
+        KnowledgeCategoryId: a.KnowledgeCategoryId,
+        KnowledgeCategoryName: a.KnowledgeCategoryName,
+        DescriptionTextLen: (a.DescriptionText || '').length,
+      })),
+    });
+  } catch (e: any) {
+    res.status(e?.status || 500).json({
+      error: { code: e?.code || 'DEBUG_ALL_FAILED', message_zh: e?.message || '未知错误' },
+    });
+  }
+});
+
 // Probe alternate paths that might return more than the default page.
 healthRouter.get('/debug/kb/:id/probe-paths', requireSession, async (req, res): Promise<void> => {
   const kbId = parseInt(req.params.id, 10);
