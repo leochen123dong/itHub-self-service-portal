@@ -245,7 +245,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       Summary: finalDesc.slice(0, 200),
       Description: finalDesc,
     };
-    console.log('[ticket] creating with templateId=', templateId, 'payload keys:', Object.keys(payload));
+    // Dump a compact view: id fields + critical owner/group + summary/desc
+    const slim = Object.fromEntries(
+      Object.entries(payload).filter(([k]) =>
+        /^(Ticket(Id|GroupId|Type|State|Status|Category)|OwnerUserGroup(Id|Name)|AssignedUserGroup(Id|Name)|Customer(Tag|Id|Name)|Priority|Impact|Urgency|Active|CreateOnSubmit|AccessFlags|TicketTemplateAccessFlags|Sid|SecurityContainerSid|Summary|Description)$/i.test(k),
+      ),
+    );
+    console.log('[ticket] payload (id fields):', slim);
 
     try {
       const created = await ticketsApi.create(payload);
