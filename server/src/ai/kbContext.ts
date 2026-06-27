@@ -206,6 +206,14 @@ async function keywordSearch(
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 
+  // Debug: log top scores so we can see which articles matched what.
+  const debugTop = list
+    .map((r) => ({ title: pickTitle(r), score: scoreArticle(r, tokens) }))
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+  console.log(`[kb] keyword tokens=${JSON.stringify(tokens)} topScores=${JSON.stringify(debugTop)}`);
+
   return scored.map(({ article, score }) => ({
     id: pickId(article),
     title: pickTitle(article),
