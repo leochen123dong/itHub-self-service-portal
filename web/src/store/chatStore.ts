@@ -286,6 +286,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // template's own ACL context, which doesn't match the current user's
     // session.
     const detail = templateDetail ?? {};
+    const incidentCfg = (detail.TicketTemplateConfig as Record<string, unknown> | undefined)?.IncidentConfig as
+      | Record<string, unknown>
+      | undefined;
     const payload: Record<string, unknown> = {
       TicketTemplateId: templateId,
       Summary: finalDesc.slice(0, 200),
@@ -296,12 +299,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       AssignedUserGroupId: detail.AssignedUserGroupId,
       ServiceLevelId: detail.ServiceLevelId,
       TimeZoneInfoId: detail.TimeZoneInfoId,
+      CustomerTag: 'ciscoinnovation1',
+      IncidentState: incidentCfg?.IncidentState,
     };
     // Drop nulls — ITHub rejects null in some fields with 404.
     for (const k of Object.keys(payload)) {
       if (payload[k] === null || payload[k] === undefined) delete payload[k];
     }
-    console.log('[ticket] payload (minimal):', payload);
+    console.log('[ticket] payload (full):', payload);
 
     try {
       const created = await ticketsApi.create(payload);
