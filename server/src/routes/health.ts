@@ -76,6 +76,43 @@ healthRouter.get('/debug/kb/:id/categories', requireSession, async (req, res): P
   }
 });
 
+// Probe which pagination / query convention ITHub honors for /KnowledgeArticles.
+// Tries common conventions and reports which one returned more than 10 items.
+healthRouter.get('/debug/kb/:id/probe-paging', requireSession, async (req, res): Promise<void> => {
+  const kbId = parseInt(req.params.id, 10);
+  const token = req.session!.accessToken;
+  const variants: Array<{ name: string; query: Record<string, string | number> }> = [
+    { name: 'pageSize=100', query: { pageSize: 100 } },
+    { name: 'PageSize=100', query: { PageSize: 100 } },
+    { name: '$top=100', query: { $top: 100 } },
+    { name: 'top=100', query: { top: 100 } },
+    { name: 'limit=100', query: { limit: 100 } },
+    { name: 'pagesize=100', query: { pagesize: 100 } },
+    { name: 'count=100', query: { count: 100 } },
+  ];
+  const out: Array<{ name: string; count: number | string; firstId?: number; lastId?: number; error?: string }> = [];
+  for (const v of variants) {
+    try {
+      const data = await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+        { accessToken: token, query: v.query },
+      );
+      const list: any[] = Array.isArray(data)
+        ? data
+        : data?.Results ?? data?.results ?? data?.Items ?? data?.items ?? data?.Data ?? data?.Articles ?? [];
+      out.push({
+        name: v.name,
+        count: list.length,
+        firstId: list[0]?.KnowledgeArticleId,
+        lastId: list[list.length - 1]?.KnowledgeArticleId,
+      });
+    } catch (e: any) {
+      out.push({ name: v.name, count: 'err', error: e?.message });
+    }
+  }
+  res.json({ kbId, variants: out });
+});
+
 healthRouter.post('/debug/kb-search', requireSession, async (req, res): Promise<void> => {
   const { query, kbId, topK = 5 } = req.body ?? {};
   if (!query) {
