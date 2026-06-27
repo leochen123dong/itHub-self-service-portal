@@ -1,7 +1,32 @@
 import { create } from 'zustand';
 import { aiApi } from '../api/ai';
 import { ticketsApi } from '../api/tickets';
+import { catalogApi } from '../api/catalog';
 import type { ChatMessage, SuggestedAction } from '../types/api';
+
+// Cached after first successful fetch so we don't re-list templates on every
+// escalation. A real tenant usually has 5-50 templates; for the demo this is
+// the only one we care about.
+let cachedTemplateId: number | null = null;
+
+async function resolveTemplateId(): Promise<number | null> {
+  if (cachedTemplateId !== null) return cachedTemplateId;
+  try {
+    const templates = await catalogApi.list();
+    const first = Array.isArray(templates) ? templates[0] : null;
+    const id = first?.TicketTemplateId ?? null;
+    if (typeof id === 'number') {
+      cachedTemplateId = id;
+      console.log('[ticket] resolved template id:', id, 'name:', first?.Name);
+      return id;
+    }
+    console.warn('[ticket] no templates returned from catalog:', templates);
+    return null;
+  } catch (e) {
+    console.warn('[ticket] catalog.list failed:', (e as Error)?.message);
+    return null;
+  }
+}
 
 interface ChatState {
   chatId: string | null;
@@ -117,8 +142,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { messages, chatId } = get();
     if (!chatId) return null;
 
-    // Use ByCheckPoint to get template items for an AIChat context
-    // The checkpoint string identifies this chat — backend/IThub will map to a ticket template
     const summary = messages
       .filter((m) => m.Role === 'User' || m.Role === 'Assistant')
       .slice(-6)
@@ -126,39 +149,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .join('\n\n');
     const finalDesc = (description || '').trim() || summary || '（无描述）';
 
-    // First call ByCheckPoint — try a few checkpoint patterns the upstream may understand.
-    // Pattern: encode the chat id as the checkpoint; if it doesn't match, the upstream
-    // will return generic templates the user can pick from.
-    let checkpoint = `AIChat:${chatId}`;
+    // Strategy: try ByCheckPoint first (it may return a pre-filled incident
+    // template). If that doesn't yield a usable item, fall back to listing
+    // available ticket templates and using the first one — a TicketTemplateId
+    // of 0 or undefined causes ITHub to return 404.
+    let templateId: number | undefined;
+    let preFilled: Record<string, unknown> | undefined;
     try {
-      const cp = await ticketsApi.byCheckPoint(checkpoint);
-      // For demo, just take the first incident item and create a ticket using its template data
-      const item = cp.TicketIncidentItems?.[0] || cp.TicketChangeItems?.[0]
-        || cp.TicketRequestItems?.[0] || cp.TicketProblemItems?.[0];
-      const payload = item ? { ...item, Summary: finalDesc.slice(0, 200) } : {
-        TicketTemplateId: cp.TicketIncidentItems?.[0]?.TicketTemplateId || 0,
-        Summary: finalDesc.slice(0, 200),
-        Description: finalDesc,
-      };
+      const cp = await ticketsApi.byCheckPoint(`AIChat:${chatId}`);
+      const item =
+        cp?.TicketIncidentItems?.[0] ||
+        cp?.TicketChangeItems?.[0] ||
+        cp?.TicketRequestItems?.[0] ||
+        cp?.TicketProblemItems?.[0];
+      if (item) {
+        templateId = item.TicketTemplateId;
+        preFilled = { ...item };
+      }
+    } catch (e) {
+      console.warn('[ticket] byCheckPoint failed:', (e as Error)?.message);
+    }
+
+    if (templateId === undefined || templateId === 0 || templateId === null) {
+      const id = await resolveTemplateId();
+      if (typeof id === 'number') templateId = id;
+    }
+
+    if (!templateId) {
+      console.error('[ticket] no TicketTemplateId available, cannot create');
+      return null;
+    }
+
+    const payload = {
+      ...(preFilled ?? {}),
+      TicketTemplateId: templateId,
+      Summary: finalDesc.slice(0, 200),
+      Description: finalDesc,
+    };
+    console.log('[ticket] creating with templateId=', templateId);
+
+    try {
       const created = await ticketsApi.create(payload);
       const ticketId = created?.TicketId ?? created?.ticketId ?? created?.Id ?? null;
       if (ticketId) {
         set({ createdTicketId: ticketId });
         return { ticketId };
       }
+      console.error('[ticket] create returned no id:', created);
+      return null;
     } catch (e) {
-      // Fallback: synthesize a minimal incident ticket
-      const created = await ticketsApi.create({
-        Summary: `AI 求助转工单 (chat: ${chatId.slice(0, 8)})`,
-        Description: finalDesc,
-      });
-      const ticketId = created?.TicketId ?? created?.ticketId ?? created?.Id ?? null;
-      if (ticketId) {
-        set({ createdTicketId: ticketId });
-        return { ticketId };
-      }
+      console.error('[ticket] create failed:', (e as Error)?.message);
+      return null;
     }
-    return null;
   },
 
   reset: () => set({
