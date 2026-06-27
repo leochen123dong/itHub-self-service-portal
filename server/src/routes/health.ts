@@ -113,6 +113,44 @@ healthRouter.get('/debug/kb/:id/probe-paging', requireSession, async (req, res):
   res.json({ kbId, variants: out });
 });
 
+// Probe alternate paths that might return more than the default page.
+healthRouter.get('/debug/kb/:id/probe-paths', requireSession, async (req, res): Promise<void> => {
+  const kbId = parseInt(req.params.id, 10);
+  const token = req.session!.accessToken;
+  const paths: Array<{ name: string; path: string; query?: Record<string, string | number>; method?: 'GET' | 'POST' }> = [
+    { name: 'top-level', path: '/api/Knowledge/KnowledgeArticles', query: { KnowledgeBaseId: kbId } },
+    { name: 'top-level-topkb', path: '/api/Knowledge/KnowledgeArticles', query: { knowledgeBaseId: kbId } },
+    { name: 'top-level-search', path: '/api/Knowledge/KnowledgeArticles/Search', method: 'POST' },
+    { name: 'base-no-slash', path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles` },
+    { name: 'by-knowledgebase', path: `/api/Knowledge/KnowledgeArticles/ByKnowledgeBase/${kbId}` },
+    { name: 'article-detail-100071', path: '/api/Knowledge/KnowledgeArticles/100071' },
+  ];
+  const out: Array<{ name: string; status: number; count: number | string; firstId?: number; lastId?: number; error?: string }> = [];
+  for (const p of paths) {
+    try {
+      const data = await ithubFetch<any>(p.path, {
+        accessToken: token,
+        method: p.method ?? 'GET',
+        query: p.query,
+        body: p.method === 'POST' ? { KnowledgeBaseId: kbId, TopK: 100 } : undefined,
+      });
+      const list: any[] = Array.isArray(data)
+        ? data
+        : data?.Results ?? data?.results ?? data?.Items ?? data?.items ?? data?.Data ?? data?.Articles ?? [];
+      out.push({
+        name: p.name,
+        status: 200,
+        count: list.length,
+        firstId: list[0]?.KnowledgeArticleId,
+        lastId: list[list.length - 1]?.KnowledgeArticleId,
+      });
+    } catch (e: any) {
+      out.push({ name: p.name, status: e?.status || 0, count: 'err', error: e?.message });
+    }
+  }
+  res.json({ kbId, paths: out });
+});
+
 healthRouter.post('/debug/kb-search', requireSession, async (req, res): Promise<void> => {
   const { query, kbId, topK = 5 } = req.body ?? {};
   if (!query) {
