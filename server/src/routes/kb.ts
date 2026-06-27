@@ -2,19 +2,22 @@ import { Router } from 'express';
 import { ithubFetch } from '../http/ithubClient.js';
 import { ITHubError } from '../http/errors.js';
 import { config } from '../config.js';
+import { resolveKbId } from '../ai/kbContext.js';
 import { requireSession } from '../session/middleware.js';
 
 export const kbRouter = Router();
 
-function requireKbId(): number {
-  if (!config.ai.kbId) {
+async function getKbId(req: any): Promise<number> {
+  if (config.ai.kbId) return parseInt(config.ai.kbId, 10);
+  const id = await resolveKbId(req.session!.accessToken, config.ithub.customerTag);
+  if (!id) {
     throw new ITHubError(
       503,
       'NO_KB',
-      '知识库未配置，请在 server/.env 设置 KB_ID',
+      '该租户下未找到知识库，请联系管理员配置 KB_ID',
     );
   }
-  return parseInt(config.ai.kbId, 10);
+  return id;
 }
 
 function err(err: unknown, fallback: string) {
@@ -29,7 +32,7 @@ function err(err: unknown, fallback: string) {
 
 kbRouter.get('/articles', requireSession, async (req, res): Promise<void> => {
   try {
-    const kbId = requireKbId();
+    const kbId = await getKbId(req);
     const data = await ithubFetch<any>(
       `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
       { accessToken: req.session!.accessToken },
@@ -56,7 +59,7 @@ kbRouter.get('/articles/:id', requireSession, async (req, res): Promise<void> =>
 
 kbRouter.post('/search', requireSession, async (req, res): Promise<void> => {
   try {
-    const kbId = requireKbId();
+    const kbId = await getKbId(req);
     const { query, topK } = req.body ?? {};
     if (!query) {
       res.status(400).json({ error: { code: 'INVALID', message_zh: '请输入查询内容' } });

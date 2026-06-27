@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { requireSession } from '../session/middleware.js';
 import { chatCompletion } from '../ai/minimax.js';
+import { buildKbContext } from '../ai/kbContext.js';
 import {
   appendAssistantMessage,
   appendUserMessage,
@@ -77,8 +78,10 @@ aiRouter.post('/chat/init', requireSession, async (req, res): Promise<void> => {
   let messages: ChatMessage[] = [];
   if (initialMessage) {
     try {
+      const kbContext = await buildKbContext(session.accessToken, initialMessage);
       const reply = await chatCompletion({
         messages: toMiniMaxHistory(chat),
+        extraSystem: kbContext ? [kbContext] : [],
       });
       appendAssistantMessage(chat.chatId, reply.content);
       messages = [
@@ -123,8 +126,10 @@ aiRouter.post('/chat/message', requireSession, async (req, res): Promise<void> =
 
   appendUserMessage(aiChatId, content);
   try {
+    const kbContext = await buildKbContext(req.session!.accessToken, content);
     const reply = await chatCompletion({
       messages: toMiniMaxHistory(getChat(aiChatId)!),
+      extraSystem: kbContext ? [kbContext] : [],
     });
     appendAssistantMessage(aiChatId, reply.content);
     res.json({

@@ -10,6 +10,8 @@ export interface MiniMaxMessage {
 
 export interface MiniMaxChatOptions {
   messages: MiniMaxMessage[];
+  /** Extra system messages to inject AFTER the default system prompt. */
+  extraSystem?: string[];
   temperature?: number;
   maxTokens?: number;
 }
@@ -53,10 +55,12 @@ export async function chatCompletion(opts: MiniMaxChatOptions): Promise<MiniMaxC
     );
   }
   const messages: MiniMaxMessage[] = opts.messages;
-  const hasSystem = messages.some((m) => m.role === 'system');
-  const finalMessages: MiniMaxMessage[] = hasSystem
-    ? messages
-    : [{ role: 'system', content: DEFAULT_SYSTEM_PROMPT }, ...messages];
+  const userTurns = messages.filter((m) => m.role !== 'system');
+  const finalMessages: MiniMaxMessage[] = [
+    { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
+    ...(opts.extraSystem ?? []).map((s) => ({ role: 'system' as const, content: s })),
+    ...userTurns,
+  ];
 
   const body = {
     model: config.minimax.model,
