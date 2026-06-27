@@ -55,7 +55,7 @@ export const config = {
   },
 
   minimax: {
-    enabled: boolEnv('ENABLE_MINIMAX_FALLBACK', false),
+    enabled: boolEnv('ENABLE_MINIMAX', true),
     apiKey: optional('MINIMAX_API_KEY'),
     baseUrl: process.env.MINIMAX_BASE_URL ?? 'https://api.minimaxi.com',
     model: process.env.MINIMAX_MODEL ?? 'MiniMax-Text-01',
