@@ -20,10 +20,21 @@ ticketsRouter.get('/', requireSession, async (req, res): Promise<void> => {
   try {
     const offset = Number(req.query.offset ?? 0);
     const count = Number(req.query.count ?? 50);
-    const data = await ithubFetch<any>('/api/ServiceDesk/Tickets', {
-      accessToken: req.session!.accessToken,
-      query: { offset, count },
-    });
+    if (!config.ithub.apiKey) {
+      res.status(500).json({
+        error: {
+          code: 'NO_API_KEY',
+          message_zh: '服务端未配置 ITHUB_API_KEY，无法读取工单列表',
+        },
+      });
+      return;
+    }
+    // ITHub list endpoint requires the customer tag in the path and the
+    // tenant ApiKey header — bare /api/ServiceDesk/Tickets returns 404.
+    const data = await ithubFetch<any>(
+      `/api/ServiceDesk/Customers/${config.ithub.customerTag}/Tickets`,
+      { apiKey: config.ithub.apiKey, query: { offset, count } },
+    );
     res.json(data);
   } catch (e) {
     const { status, body } = err(e, '获取工单列表失败');
