@@ -13,15 +13,32 @@ async function resolveTemplateId(): Promise<number | null> {
   if (cachedTemplateId !== null) return cachedTemplateId;
   try {
     const templates = await catalogApi.list();
-    const first = Array.isArray(templates) ? templates[0] : null;
-    const id = first?.TicketTemplateId ?? null;
-    if (typeof id === 'number') {
-      cachedTemplateId = id;
-      console.log('[ticket] resolved template id:', id, 'name:', first?.Name);
-      return id;
+    if (!Array.isArray(templates) || templates.length === 0) {
+      console.warn('[ticket] catalog returned no templates');
+      return null;
     }
-    console.warn('[ticket] no templates returned from catalog:', templates);
-    return null;
+    // ITHub's /api/ServiceDesk/TicketTemplates returns a tree where root
+    // category nodes have TicketTemplateId = -1 or 0 (placeholder, not a
+    // real creatable template). Filter those out, then prefer Active ones,
+    // and fall back to the first remaining entry.
+    const real = templates.filter((t) => {
+      const id = t?.TicketTemplateId;
+      return typeof id === 'number' && id > 0;
+    });
+    if (real.length === 0) {
+      console.warn('[ticket] no usable templates after filtering:', templates);
+      return null;
+    }
+    const active = real.find((t) => t.Active !== false) ?? real[0];
+    cachedTemplateId = active.TicketTemplateId;
+    console.log(
+      '[ticket] resolved template id:',
+      cachedTemplateId,
+      'name:',
+      active.Name,
+      `(picked from ${templates.length} entries)`,
+    );
+    return cachedTemplateId;
   } catch (e) {
     console.warn('[ticket] catalog.list failed:', (e as Error)?.message);
     return null;
@@ -177,7 +194,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (!templateId) {
       console.error('[ticket] no TicketTemplateId available, cannot create');
-      return null;
+      throw new Error('未找到可用的工单模板');
     }
 
     const payload = {
