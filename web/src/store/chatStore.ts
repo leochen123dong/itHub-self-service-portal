@@ -282,9 +282,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Try a minimal payload first — only the fields ITHub requires for ticket
     // creation. Spreading the entire template detail previously caused 404
-    // because we forwarded Sid / SecurityContainerSid / AccessFlags from the
-    // template's own ACL context, which doesn't match the current user's
-    // session.
+    // because we forwarded Sid / AccessFlags from the template's own ACL
+    // context, which doesn't match the current user's session.
     const detail = templateDetail ?? {};
     const incidentCfg = (detail.TicketTemplateConfig as Record<string, unknown> | undefined)?.IncidentConfig as
       | Record<string, unknown>
@@ -301,6 +300,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       TimeZoneInfoId: detail.TimeZoneInfoId,
       CustomerTag: 'ciscoinnovation1',
       IncidentState: incidentCfg?.IncidentState,
+      // SecurityContainerSid scopes the new ticket to the template's own
+      // security container. Required when the template is in a non-default
+      // container; without it ITHub may 404 the create.
+      SecurityContainerSid: detail.SecurityContainerSid,
     };
     // Drop nulls — ITHub rejects null in some fields with 404.
     for (const k of Object.keys(payload)) {
