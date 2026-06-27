@@ -66,12 +66,22 @@ function pickId(r: KbSearchResult): number | undefined {
 }
 
 function pickTitle(r: KbSearchResult): string {
-  return r.Name || r.Title || r.Identifier || '(无标题)';
+  // In the list endpoint, Name/Identifier are the article ID (e.g. "K100070"),
+  // not a human title. Summary is the real caption — use it as the title
+  // for the prompt and leave ID lookups to pickId().
+  if (r.Summary && r.Summary.trim()) return r.Summary.trim();
+  if (r.Title && r.Title.trim()) return r.Title.trim();
+  return '(无标题)';
 }
 
 function pickBody(r: KbSearchResult): string {
-  // ITHub stores the long body in DescriptionText; keep fallbacks for variants.
-  return r.Summary || r.DescriptionText || r.Description || r.Content || r.Body || '';
+  // DescriptionText is the real body (often >1KB). Summary is usually a
+  // 1-line caption and must NOT shadow it via ||.
+  if (r.DescriptionText) return r.DescriptionText;
+  if (r.Description) return r.Description;
+  if (r.Content) return r.Content;
+  if (r.Body) return r.Body;
+  return r.Summary || '';
 }
 
 /**
