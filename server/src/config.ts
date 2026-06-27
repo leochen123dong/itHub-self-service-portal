@@ -32,11 +32,14 @@ export const config = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
-  // Cross-site cookies (e.g. GH Pages → Render) need SameSite=None; Secure.
-  // Local dev over HTTP can't satisfy Secure, so fall back to Lax.
-  hasLocalhostOrigin: (process.env.WEB_ORIGIN ?? 'http://localhost:5173')
+  // If any allowed origin is NOT localhost, we're serving cross-site
+  // (e.g. GH Pages → Render) and need SameSite=None + Secure. Local-only
+  // dev (localhost only) keeps Lax because Secure requires HTTPS.
+  hasExternalOrigin: (process.env.WEB_ORIGIN ?? 'http://localhost:5173')
     .split(',')
-    .some((s) => s.includes('localhost')),
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .some((s) => !s.includes('localhost')),
 
   ithub: {
     baseUrl: required('ITHUB_BASE_URL', 'https://demo.logicalisservice.com'),

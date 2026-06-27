@@ -16,10 +16,10 @@ healthRouter.get('/health', (_req, res) => {
 healthRouter.get('/debug/config', (_req, res) => {
   res.json({
     nodeEnv: process.env.NODE_ENV ?? '(unset)',
-    hasLocalhostOrigin: config.hasLocalhostOrigin,
+    hasExternalOrigin: config.hasExternalOrigin,
     webOrigins: config.webOrigins,
     cookieSameSite: config.session.cookieSameSite,
     cookieSecure: config.session.cookieSecure,
-    commitHint: 'cookie-fix-v2', // bump on deploy to confirm latest code is live
+    commitHint: 'cookie-fix-v3',
   });
 });
