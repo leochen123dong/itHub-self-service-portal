@@ -17,26 +17,48 @@ async function resolveTemplateId(): Promise<number | null> {
       console.warn('[ticket] catalog returned no templates');
       return null;
     }
-    // ITHub's /api/ServiceDesk/TicketTemplates returns a tree where root
-    // category nodes have TicketTemplateId = -1 or 0 (placeholder, not a
-    // real creatable template). Filter those out, then prefer Active ones,
-    // and fall back to the first remaining entry.
-    const real = templates.filter((t) => {
+    // Dump full list to console so misclassifications are visible at a glance.
+    console.log(
+      '[ticket] catalog templates:',
+      templates.map((t) => ({
+        id: t.TicketTemplateId,
+        name: t.Name,
+        active: t.Active,
+        tag: t.Tag,
+      })),
+    );
+
+    // Two layers of filtering:
+    // 1. Drop placeholders (TicketTemplateId <= 0 — root category nodes
+    //    ITHub returns as "Service Request" with id = -1, etc.)
+    // 2. Drop Inactive templates (Active === false). Templates without an
+    //    Active field are assumed Active (newer ITHub versions omit it).
+    const eligible = templates.filter((t) => {
       const id = t?.TicketTemplateId;
-      return typeof id === 'number' && id > 0;
+      return typeof id === 'number' && id > 0 && t.Active !== false;
     });
-    if (real.length === 0) {
-      console.warn('[ticket] no usable templates after filtering:', templates);
+    if (eligible.length === 0) {
+      console.warn('[ticket] no eligible templates after filtering');
       return null;
     }
-    const active = real.find((t) => t.Active !== false) ?? real[0];
-    cachedTemplateId = active.TicketTemplateId;
+
+    // "转人工" semantically maps to an Incident (something is broken, user
+    // needs help). Prefer an Incident-type template; otherwise fall back to
+    // the first eligible entry.
+    const incident = eligible.find((t) =>
+      String(t.Tag ?? '').toLowerCase().includes('incident') ||
+      String(t.Name ?? '').toLowerCase().includes('incident'),
+    );
+    const picked = incident ?? eligible[0];
+    cachedTemplateId = picked.TicketTemplateId;
     console.log(
-      '[ticket] resolved template id:',
+      '[ticket] picked template:',
       cachedTemplateId,
       'name:',
-      active.Name,
-      `(picked from ${templates.length} entries)`,
+      picked.Name,
+      'tag:',
+      picked.Tag,
+      `(eligible=${eligible.length}/${templates.length})`,
     );
     return cachedTemplateId;
   } catch (e) {
