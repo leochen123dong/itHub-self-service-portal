@@ -123,14 +123,27 @@ export async function buildKbContext(
   if (!picked.length) return '';
 
   console.log(`[kb] picked ${picked.length} articles with content`);
-  const blocks = picked
-    .map((r, i) => {
-      // Keep the full body — MiniMax-Text-01 has plenty of context room, and
-      // specifics like server addresses / node names usually live deep in the
-      // article. Truncating here was throwing away the answer.
-      return `[${i + 1}] ${r.title}\n${r.body}`;
-    })
-    .join('\n\n');
+  // Hard cap on the injected context so MiniMax doesn't reject with
+  // "context window exceeds limit" (status_code 2013). Empirically ~2MB of
+  // KB text saturates the model; we keep a generous budget for actual answer
+  // room (response budget ~ max_tokens 1024 ≈ 2-4KB Chinese).
+  const PER_ARTICLE_MAX = 1500;
+  const TOTAL_MAX = 6000;
+  const blocks: string[] = [];
+  let totalLen = 0;
+  for (let i = 0; i < picked.length; i += 1) {
+    const r = picked[i];
+    const body = r.body.length > PER_ARTICLE_MAX
+      ? r.body.slice(0, PER_ARTICLE_MAX) + '\n…(已截断)'
+      : r.body;
+    const block = `[${i + 1}] ${r.title}\n${body}`;
+    if (totalLen + block.length > TOTAL_MAX) {
+      console.warn(`[kb] context budget hit at article ${i + 1}/${picked.length}; truncating`);
+      break;
+    }
+    blocks.push(block);
+    totalLen += block.length;
+  }
 
   return `以下是企业内部知识库的检索结果。请严格遵守：
 
@@ -138,7 +151,7 @@ export async function buildKbContext(
 2. 如果用户问题在 KB 中找不到对应答案，明确告诉用户"知识库中没有找到 XX 的相关内容"，不要硬答。
 3. 引用编号只用 [1]、[2] 这样的纯数字，文末不要再写引用说明段落。
 
----\n知识库内容：\n${blocks}`;
+---\n知识库内容：\n${blocks.join('\n\n')}`;
 }
 
 async function tryEmbeddingSearch(
