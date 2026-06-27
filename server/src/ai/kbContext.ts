@@ -279,67 +279,40 @@ function countOccurrences(haystack: string, needle: string): number {
 }
 
 /**
- * ITHub's /KnowledgeArticles endpoint defaults to a small page (10) which
- * drops recently added articles (e.g. K100071). Page through with pageSize=100
- * and dedupe by KnowledgeArticleId so we cover the whole KB.
+ * ITHub's /KnowledgeBases/{kbId}/KnowledgeArticles defaults to a small page
+ * (10) and ignores pageSize params. But the top-level
+ * /KnowledgeArticles?KnowledgeBaseId={kbId} returns the full list (verified:
+ * 21 articles including the newest K100071). Use that as the primary path.
  */
 async function listAllArticles(accessToken: string, kbId: number): Promise<KbArticle[]> {
-  const out: KbArticle[] = [];
-  const seen = new Set<number>();
-  const pageSize = 100;
-
-  // Try a single call with pageSize=100 first — if ITHub honors it, we
-  // avoid multiple round trips.
-  for (let attempt = 0; attempt < 1; attempt++) {
-    try {
-      const raw = await ithubFetch<any>(
-        `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
-        { accessToken, query: { pageSize } },
-      );
-      const page: KbArticle[] = extractArticleList(raw);
-      for (const a of page) {
-        const id = pickId(a);
-        if (typeof id === 'number' && !seen.has(id)) {
-          seen.add(id);
-          out.push(a);
-        }
-      }
-      if (page.length < pageSize) {
-        console.log(`[kb] listAllArticles got ${out.length} articles in one page (pageSize=${pageSize})`);
-        return out;
-      }
-    } catch (err) {
-      console.warn('[kb] paged KnowledgeArticles failed:', (err as Error).message);
-      return out;
+  // Primary: top-level listing, no page cap.
+  try {
+    const raw = await ithubFetch<any>(`/api/Knowledge/KnowledgeArticles`, {
+      accessToken,
+      query: { KnowledgeBaseId: kbId },
+    });
+    const list = extractArticleList(raw);
+    if (list.length > 0) {
+      console.log(`[kb] listAllArticles via top-level: ${list.length} articles`);
+      return list;
     }
+  } catch (err) {
+    console.warn('[kb] top-level KnowledgeArticles failed:', (err as Error).message);
   }
 
-  // Page through if the first call returned a full page.
-  let page = 1;
-  while (page < 50) {
-    try {
-      const raw = await ithubFetch<any>(
-        `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
-        { accessToken, query: { pageSize, page } },
-      );
-      const list: KbArticle[] = extractArticleList(raw);
-      if (list.length === 0) break;
-      for (const a of list) {
-        const id = pickId(a);
-        if (typeof id === 'number' && !seen.has(id)) {
-          seen.add(id);
-          out.push(a);
-        }
-      }
-      if (list.length < pageSize) break;
-      page += 1;
-    } catch (err) {
-      console.warn(`[kb] KnowledgeArticles page=${page} failed:`, (err as Error).message);
-      break;
-    }
+  // Fallback: nested path, returns only the default top-10. Better than nothing.
+  try {
+    const raw = await ithubFetch<any>(
+      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+      { accessToken },
+    );
+    const list = extractArticleList(raw);
+    console.log(`[kb] listAllArticles via nested path (fallback, capped): ${list.length} articles`);
+    return list;
+  } catch (err) {
+    console.warn('[kb] nested KnowledgeArticles failed:', (err as Error).message);
+    return [];
   }
-  console.log(`[kb] listAllArticles returned ${out.length} unique articles across ${page} pages`);
-  return out;
 }
 
 function extractArticleList(raw: any): KbArticle[] {
