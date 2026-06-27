@@ -14,18 +14,28 @@ import { ticketsRouter } from './routes/tickets.js';
 const app = express();
 
 const allowedOrigins = config.webOrigins;
+const isOriginAllowed = (origin: string | undefined): boolean => {
+  if (!origin) return true; // same-origin / curl / server-to-server
+  return allowedOrigins.includes('*') || allowedOrigins.includes(origin);
+};
 const corsOptions: cors.CorsOptions = {
   credentials: true,
   origin: (origin, cb) => {
-    // Allow same-origin / no-origin (curl, server-to-server)
-    if (!origin) return cb(null, true);
-    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-      return cb(null, true);
-    }
-    return cb(new Error(`Origin ${origin} not allowed by CORS`));
+    if (isOriginAllowed(origin)) return cb(null, true);
+    // Don't throw — pass false so cors omits headers. The 403 check below
+    // surfaces a clean error to the client instead of a 500.
+    return cb(null, false);
   },
 };
 app.use(cors(corsOptions));
+// Reject blocked origins with a clean 403 (instead of letting cors silently
+// omit headers and the browser emit a vague "network error").
+app.use((req, res, next) => {
+  if (isOriginAllowed(req.headers.origin as string | undefined)) return next();
+  res.status(403).json({
+    error: { code: 'CORS', message_zh: '跨域来源未在白名单中' },
+  });
+});
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 app.use(morgan('dev'));
