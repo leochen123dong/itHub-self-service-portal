@@ -214,7 +214,20 @@ async function keywordSearch(
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 
+  // Diagnostic: log which fields are actually populated so we can debug
+  // why pickBody sometimes returns a near-empty string.
   console.log(`[kb] keyword tokens=${JSON.stringify(tokens)} picked=${scored.length}`);
+  if (scored.length > 0) {
+    const sample = scored[0].article;
+    console.log(
+      `[kb] topArticle keys=${Object.keys(sample).join(',')} ` +
+      `name="${pickTitle(sample)}" ` +
+      `summaryLen=${(sample.Summary || '').length} ` +
+      `descTextLen=${(sample.DescriptionText || '').length} ` +
+      `descLen=${(sample.Description || '').length} ` +
+      `bodyLen=${(sample.Body || '').length}`,
+    );
+  }
 
   return scored.map(({ article, score }) => ({
     id: pickId(article),
