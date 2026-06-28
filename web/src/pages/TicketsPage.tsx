@@ -121,19 +121,24 @@ export function TicketsPage() {
             <div>
               <div className="field-label">处理人</div>
               <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                {detail.AssignedUser?.UserName ? (
-                  <>
-                    <span
-                      className="online-dot"
-                      data-online={detail.AssignedUser.IsOnline ? '1' : '0'}
-                    />
-                    <span style={{ color: detail.AssignedUser.HtmlColor || 'inherit' }}>
-                      {detail.AssignedUser.UserName}
-                    </span>
-                  </>
-                ) : (
-                  '未分配'
-                )}
+                {(() => {
+                  const u = detail.AssignedUser;
+                  // ITHub canonical: PascalCase Name (display) / Username (login).
+                  // Accept either, fall back to UserName for older payloads.
+                  const display = u?.Name || u?.Username || u?.UserName;
+                  if (!display) return '未分配';
+                  const color = u?.HtmlColor || u?.Color;
+                  const online = u?.IsOnline ?? u?.Online;
+                  return (
+                    <>
+                      <span
+                        className="online-dot"
+                        data-online={online ? '1' : '0'}
+                      />
+                      <span style={{ color: color || 'inherit' }}>{display}</span>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>

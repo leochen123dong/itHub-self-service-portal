@@ -129,11 +129,16 @@ export interface Ticket {
   // ITHub user fields passed through so the UI can show per-user color and
   // online status. Field names mirror the priority pattern above.
   AssignedUser?: {
+    // ITHub returns PascalCase: Name (display) and Username (login).
+    // Defensive: also accept camelCase forms in case the proxy normalizes.
     UserName?: string;
+    Username?: string;
     Name?: string;
     UserId?: number;
     HtmlColor?: string;
+    Color?: string;
     IsOnline?: boolean;
+    Online?: boolean;
     Presence?: string;
   };
   IncidentState?: string | number;
