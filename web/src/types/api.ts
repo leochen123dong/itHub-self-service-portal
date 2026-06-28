@@ -144,9 +144,14 @@ export interface Ticket {
 export interface TicketJournal {
   TicketJournalId?: number;
   TicketJournalType?: string | number;
+  Html?: string;
   Content?: string;
   CreatedUtc?: string;
   CreatedLocalTime?: string;
+  ModifiedUtc?: string;
+  ModifiedLocalTime?: string;
+  CreatedBy?: { Name?: string; UserName?: string };
+  ModifiedBy?: { Name?: string; UserName?: string };
   UserName?: string;
 }
 
