@@ -24,6 +24,8 @@ function stripHtml(s: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
+    // ITHub sends Unicode as hex entities (e.g. &#x5B89;). Decode both forms.
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{2,}/g, '\n')
