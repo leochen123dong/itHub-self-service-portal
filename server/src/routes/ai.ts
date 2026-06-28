@@ -573,3 +573,63 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
     },
   });
 });
+
+// POST /api/chat/summarize — compress a chat transcript into a one-liner
+// (≤80 zh chars) for use as the ITHub ticket Description. The full
+// transcript still goes into ITHub Journals via /api/tickets/escalate;
+// this is just the short summary for the Description field.
+//
+// Body: { messages: Array<{ Role: 'User'|'Assistant'|string; Content: string }> }
+// Response: { summary: string }
+// On failure: 502 with { code, message_zh } so the client can fall back.
+aiRouter.post('/chat/summarize', requireSession, async (req, res): Promise<void> => {
+  const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+  // Only keep User/Assistant turns and drop empty bodies. Map to a flat
+  // "用户：xxx\nAI：yyy" string so MiniMax sees what we see.
+  const turns = messages
+    .filter(
+      (m: any) =>
+        m &&
+        (m.Role === 'User' || m.Role === 'Assistant') &&
+        typeof m.Content === 'string' &&
+        m.Content.trim(),
+    )
+    .map((m: any) => `${m.Role === 'User' ? '用户' : 'AI'}：${m.Content.trim()}`)
+    .join('\n');
+
+  if (!turns) {
+    res.status(400).json({
+      error: { code: 'EMPTY_MESSAGES', message_zh: '没有可总结的对话内容' },
+    });
+    return;
+  }
+
+  const prompt = `你是一名 IT 支持工程师的助手。请根据以下用户与 AI 的对话记录，**精简成一句话**（≤50 个中文字）作为工单描述。
+要求：
+- 用客观陈述句，说清楚"用户遇到了什么问题"
+- 不要出现"用户"或"AI"等主语
+- 不要客套话、不要"以下是..."之类的开头
+- 只输出精简结果本身，不要任何解释或前缀
+
+对话记录：
+${turns}`;
+
+  try {
+    const reply = await chatCompletion({
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+    });
+    const summary = reply.content.trim().slice(0, 100) || '（AI 未返回摘要）';
+    res.json({ summary });
+  } catch (err: any) {
+    const zh =
+      err?.status === 401
+        ? 'AI 服务认证失败'
+        : err?.status === 408
+        ? 'AI 响应超时'
+        : err?.message || 'AI 精简失败';
+    res.status(err?.status || 502).json({
+      error: { code: err?.code || 'AI_SUMMARIZE_FAILED', message_zh: zh },
+    });
+  }
+});

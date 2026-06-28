@@ -42,6 +42,58 @@ ticketsRouter.get('/', requireSession, async (req, res): Promise<void> => {
   }
 });
 
+// Admin-only debug: fetch a ticket from ITHub with arbitrary $expand/$select
+// to probe for presence / color fields. Returns the raw ITHub body so we
+// can see exactly what the upstream returns. Not for production use — keep
+// behind requireAdmin.
+ticketsRouter.get('/_debug/ithub-ticket/:id', requireSession, async (req, res): Promise<void> => {
+  if (!config.admin.identities.includes(req.session!.userName)) {
+    res.status(403).json({ error: { code: 'NOT_ADMIN', message_zh: '仅管理员可访问' } });
+    return;
+  }
+  if (!config.ithub.apiKey) {
+    res.status(500).json({ error: { code: 'NO_API_KEY', message_zh: '服务端未配置 ITHUB_API_KEY' } });
+    return;
+  }
+  const allowedOdata = ['$expand', '$select'];
+  const query: Record<string, string> = {};
+  for (const k of allowedOdata) {
+    const v = req.query[k];
+    if (typeof v === 'string' && v.length < 200) query[k] = v;
+  }
+  try {
+    const data = await ithubFetch<any>(
+      `/api/ServiceDesk/Tickets/${req.params.id}`,
+      {
+        accessToken: req.session!.accessToken,
+        apiKey: config.ithub.apiKey,
+        ...(Object.keys(query).length ? { query } : {}),
+      },
+    );
+    res.json({
+      queriedExpand: query.$expand ?? null,
+      queriedSelect: query.$select ?? null,
+      assignedUserRaw: data?.AssignedUser ?? null,
+      assignedUserKeys: data?.AssignedUser ? Object.keys(data.AssignedUser) : [],
+      hasIsOnline: data?.AssignedUser && (
+        'IsOnline' in data.AssignedUser ||
+        'Online' in data.AssignedUser ||
+        'Presence' in data.AssignedUser ||
+        'IsPresent' in data.AssignedUser
+      ),
+      hasColor: data?.AssignedUser && (
+        'HtmlColor' in data.AssignedUser ||
+        'Color' in data.AssignedUser ||
+        'PresenceColor' in data.AssignedUser ||
+        'HtmlColour' in data.AssignedUser
+      ),
+    });
+  } catch (e) {
+    const { status, body } = err(e, 'ITHub 探测失败');
+    res.status(status).json(body);
+  }
+});
+
 // ITHub returns more populated ticket objects (assigned user, color, online
 // status) when both the tenant ApiKey AND the user AccessToken are sent.
 // Without the ApiKey the assigned-user fields are stripped.
@@ -53,11 +105,22 @@ ticketsRouter.get('/:id', requireSession, async (req, res): Promise<void> => {
     return;
   }
   try {
+    // Forward OData $expand / $select so the client can probe for presence
+    // and color on AssignedUser without us having to bake the field list
+    // in. Whitelist known OData params + cap length to avoid smuggling
+    // arbitrary query strings to ITHub.
+    const allowedOdata = ['$expand', '$select'];
+    const query: Record<string, string> = {};
+    for (const k of allowedOdata) {
+      const v = req.query[k];
+      if (typeof v === 'string' && v.length < 200) query[k] = v;
+    }
     const data = await ithubFetch<any>(
       `/api/ServiceDesk/Tickets/${req.params.id}`,
       {
         accessToken: req.session!.accessToken,
         apiKey: config.ithub.apiKey,
+        ...(Object.keys(query).length ? { query } : {}),
       },
     );
     res.json(data);

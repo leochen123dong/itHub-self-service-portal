@@ -18,7 +18,7 @@ export function ChatPanel({ routeChatId, variant = 'standalone' }: Props) {
   const toast = useUiStore((s) => s.toast);
 
   const {
-    chatId, chatTitle, messages, suggestions, sending, createdTicketId,
+    chatId, chatTitle, messages, suggestions, sending, escalating, createdTicketId,
     initChat, loadChat, sendMessage, escalateToTicket, reset,
   } = useChatStore();
 
@@ -163,10 +163,10 @@ export function ChatPanel({ routeChatId, variant = 'standalone' }: Props) {
           <button
             className="btn btn-accent"
             onClick={() => setEscalateOpen(true)}
-            disabled={sending || messages.length === 0}
+            disabled={sending || escalating || messages.length === 0}
             title="将本次对话转为工单"
           >
-            转人工
+            {escalating ? '创建中…' : '转人工'}
           </button>
         </div>
       </div>

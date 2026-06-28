@@ -55,4 +55,10 @@ export const aiApi = {
       | { articleId: number; published: true }
       | { error: { code: string; message_zh: string; upstreamErrors?: any[]; draft?: any } }
     >('/ai/kb/publish', payload),
+
+  // Compress a chat transcript into a one-liner (≤80 zh chars) for use as
+  // the ITHub ticket Description. The full transcript still goes into
+  // ITHub Journals via /tickets/escalate; this is just the short summary.
+  summarizeForTicket: (messages: Array<{ Role: string; Content: string }>) =>
+    api.post<{ summary: string }>('/ai/chat/summarize', { messages }),
 };

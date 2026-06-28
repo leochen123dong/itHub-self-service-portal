@@ -113,6 +113,10 @@ interface ChatState {
   messages: ChatMessage[];
   suggestions: SuggestedAction[];
   sending: boolean;
+  // True while we're in the middle of an upgrade: AI summarize → ticket
+  // create → journal sync. The chat UI uses this to disable the escalate
+  // button and show a two-stage "AI 精简中…/创建中…" hint.
+  escalating: boolean;
   createdTicketId: number | null;
 
   initChat: (initialMessage?: string) => Promise<void>;
@@ -132,6 +136,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   suggestions: [],
   sending: false,
+  escalating: false,
   createdTicketId: null,
 
   initChat: async (initialMessage) => {
@@ -223,88 +228,118 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { messages, chatId } = get();
     if (!chatId) return null;
 
-    const summary = messages
-      .filter((m) => m.Role === 'User' || m.Role === 'Assistant')
-      .slice(-6)
-      .map((m) => `${m.Role === 'User' ? '用户' : 'AI'}：${m.Content}`)
-      .join('\n\n');
-    const finalDesc = (description || '').trim() || summary || '（无描述）';
-
-    // Resolve which template to use. byCheckPoint may return a pre-filled
-    // template ID for the AIChat context; otherwise we fall back to the
-    // best-scored template from the catalog.
-    let templateId: number | undefined;
-    let ticketType: number | undefined;
+    set({ escalating: true });
     try {
-      const cp = await ticketsApi.byCheckPoint(`AIChat:${chatId}`);
-      const item =
-        cp?.TicketIncidentItems?.[0] ||
-        cp?.TicketChangeItems?.[0] ||
-        cp?.TicketRequestItems?.[0] ||
-        cp?.TicketProblemItems?.[0];
-      if (item) {
-        templateId = item.TicketTemplateId;
-        // Pick the ticketType from which array we matched (0/1/2/3).
-        ticketType =
-          cp?.TicketIncidentItems?.[0] === item
-            ? 0
-            : cp?.TicketProblemItems?.[0] === item
-            ? 1
-            : cp?.TicketChangeItems?.[0] === item
-            ? 2
-            : 3;
+      // Fallback string: last 6 turns joined — used if AI summary fails or
+      // if the user passed in their own description. Always computed so
+      // we have a non-empty body regardless of AI outcome.
+      const fallbackSummary = messages
+        .filter((m) => m.Role === 'User' || m.Role === 'Assistant')
+        .slice(-6)
+        .map((m) => `${m.Role === 'User' ? '用户' : 'AI'}：${m.Content}`)
+        .join('\n\n');
+      const userDesc = (description || '').trim();
+
+      // Resolve which template to use. byCheckPoint may return a pre-filled
+      // template ID for the AIChat context; otherwise we fall back to the
+      // best-scored template from the catalog.
+      let templateId: number | undefined;
+      let ticketType: number | undefined;
+      try {
+        const cp = await ticketsApi.byCheckPoint(`AIChat:${chatId}`);
+        const item =
+          cp?.TicketIncidentItems?.[0] ||
+          cp?.TicketChangeItems?.[0] ||
+          cp?.TicketRequestItems?.[0] ||
+          cp?.TicketProblemItems?.[0];
+        if (item) {
+          templateId = item.TicketTemplateId;
+          // Pick the ticketType from which array we matched (0/1/2/3).
+          ticketType =
+            cp?.TicketIncidentItems?.[0] === item
+              ? 0
+              : cp?.TicketProblemItems?.[0] === item
+              ? 1
+              : cp?.TicketChangeItems?.[0] === item
+              ? 2
+              : 3;
+        }
+      } catch (e) {
+        console.warn('[ticket] byCheckPoint failed:', (e as Error)?.message);
       }
-    } catch (e) {
-      console.warn('[ticket] byCheckPoint failed:', (e as Error)?.message);
-    }
 
-    if (templateId === undefined || templateId === 0 || templateId === null) {
-      const id = await resolveTemplateId();
-      if (typeof id === 'number') templateId = id;
-    }
-
-    if (!templateId) {
-      console.error('[ticket] no TicketTemplateId available, cannot create');
-      throw new Error('未找到可用的工单模板');
-    }
-
-    // Build the chat transcript as HTML for the journal sync. ITHub journals
-    // expect <p>...</p> with <br> for newlines — same convention as the
-    // server's appendJournalAsHtml helper.
-    const chatTranscript = messages
-      .filter((m) => m.Role === 'User' || m.Role === 'Assistant')
-      .map((m) => {
-        const label = m.Role === 'User' ? '用户' : 'AI';
-        const body = m.Content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
-        return `<p><strong>${label}：</strong>${body}</p>`;
-      })
-      .join('');
-
-    // Atomic create + journal-sync. Server returns the created ticket plus a
-    // `journalPosted` flag so we can warn the user if the journal write
-    // failed but the ticket still got created.
-    try {
-      const created = await ticketsApi.escalate({
-        templateId,
-        ticketType,
-        summary: finalDesc.slice(0, 200),
-        description: finalDesc,
-        chatTranscript,
-      });
-      const ticketId = created?.TicketId ?? created?.ticketId ?? created?.Id ?? null;
-      if (ticketId) {
-        set({ createdTicketId: ticketId });
-        return {
-          ticketId,
-          journalPosted: created?.journalPosted,
-          journalError: created?.journalError,
-        };
+      if (templateId === undefined || templateId === 0 || templateId === null) {
+        const id = await resolveTemplateId();
+        if (typeof id === 'number') templateId = id;
       }
-      console.error('[ticket] escalate returned no id:', created);
-      return null;
-    } catch (e) {
-      console.error('[ticket] escalate failed:', (e as Error)?.message);
-      return null;
+
+      if (!templateId) {
+        console.error('[ticket] no TicketTemplateId available, cannot create');
+        throw new Error('未找到可用的工单模板');
+      }
+
+      // Ask MiniMax to compress the whole transcript into ≤80 zh chars. The
+      // ITHub Description field is short — we don't want the last-N-turns
+      // concatenation we used to push. On any failure (no API key, 5xx,
+      // timeout) we silently fall back to the fallback summary so the
+      // escalation flow never breaks.
+      let aiSummary: string | null = null;
+      try {
+        const r = await aiApi.summarizeForTicket(
+          messages
+            .filter((m) => m.Role === 'User' || m.Role === 'Assistant')
+            .map((m) => ({ Role: m.Role, Content: m.Content })),
+        );
+        aiSummary = r?.summary?.trim() || null;
+      } catch (e) {
+        console.warn('[ticket] AI summarize failed, using fallback:', (e as Error)?.message);
+      }
+
+      // Priority: AI summary > user description > fallback. The ITHub
+      // Description and Summary fields are independent — Description holds
+      // the same one-liner so the admin view isn't cluttered.
+      const finalDesc = aiSummary || userDesc || fallbackSummary || '（无描述）';
+
+      // Build the chat transcript as HTML for the journal sync. ITHub journals
+      // expect <p>...</p> with <br> for newlines — same convention as the
+      // server's appendJournalAsHtml helper.
+      const chatTranscript = messages
+        .filter((m) => m.Role === 'User' || m.Role === 'Assistant')
+        .map((m) => {
+          const label = m.Role === 'User' ? '用户' : 'AI';
+          const body = m.Content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
+          return `<p><strong>${label}：</strong>${body}</p>`;
+        })
+        .join('');
+
+      // Atomic create + journal-sync. Server returns the created ticket plus a
+      // `journalPosted` flag so we can warn the user if the journal write
+      // failed but the ticket still got created.
+      try {
+        const created = await ticketsApi.escalate({
+          templateId,
+          ticketType,
+          summary: finalDesc.slice(0, 200),
+          description: finalDesc,
+          chatTranscript,
+        });
+        const ticketId = created?.TicketId ?? created?.ticketId ?? created?.Id ?? null;
+        if (ticketId) {
+          set({ createdTicketId: ticketId });
+          return {
+            ticketId,
+            journalPosted: created?.journalPosted,
+            journalError: created?.journalError,
+          };
+        }
+        console.error('[ticket] escalate returned no id:', created);
+        return null;
+      } catch (e) {
+        console.error('[ticket] escalate failed:', (e as Error)?.message);
+        return null;
+      }
+    } finally {
+      set({ escalating: false });
     }
   },
 
@@ -314,6 +349,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     messages: [],
     suggestions: [],
     sending: false,
+    escalating: false,
     createdTicketId: null,
   }),
 }));
