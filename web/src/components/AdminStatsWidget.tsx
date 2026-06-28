@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { aiApi } from '../api/ai';
-import type { AdminStats } from '../types/api';
+import type { AdminStats, KbUsageStats } from '../types/api';
 
 function fmtTime(ts: number) {
   const d = new Date(ts);
@@ -16,6 +16,8 @@ function fmtTime(ts: number) {
 export function AdminStatsWidget() {
   const user = useAuthStore((s) => s.user);
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [kbStats, setKbStats] = useState<KbUsageStats | null>(null);
+  const [kbError, setKbError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -25,6 +27,10 @@ export function AdminStatsWidget() {
       .getAdminStats()
       .then(setStats)
       .catch((e: any) => setError(e?.message_zh || e?.message || '加载失败'));
+    aiApi
+      .getKbUsageStats()
+      .then(setKbStats)
+      .catch((e: any) => setKbError(e?.message_zh || e?.message || '加载失败'));
   }, [user?.isAdmin]);
 
   if (!user?.isAdmin) return null;
@@ -126,6 +132,64 @@ export function AdminStatsWidget() {
               </tbody>
             </table>
           </>
+        )}
+
+        <h4>KB 引用排行 Top 10</h4>
+        {kbError ? (
+          <p className="admin-widget-muted">KB 引用统计加载失败：{kbError}</p>
+        ) : !kbStats ? (
+          <p className="admin-widget-muted">加载 KB 引用统计…</p>
+        ) : kbStats.ranking.length === 0 ? (
+          <p className="admin-widget-muted">
+            暂无 KB 引用记录，去 AI 助手问几个问题后再来看。
+          </p>
+        ) : (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>标题</th>
+                <th style={{ width: 70 }}>文章 ID</th>
+                <th style={{ width: 80 }}>引用次数</th>
+                <th style={{ width: 110 }}>最后引用</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kbStats.ranking.map((r) => (
+                <tr key={r.articleId}>
+                  <td>{r.title}</td>
+                  <td><code>{r.articleId}</code></td>
+                  <td>{r.useCount}</td>
+                  <td>{fmtTime(r.lastUsedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <h4>从未引用的 KB 文章</h4>
+        {kbError ? (
+          <p className="admin-widget-muted">加载失败：{kbError}</p>
+        ) : !kbStats ? (
+          <p className="admin-widget-muted">加载中…</p>
+        ) : kbStats.unused.length === 0 ? (
+          <p className="admin-widget-muted">全 KB 至少被引用过一次。</p>
+        ) : (
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th style={{ width: 90 }}>文章 ID</th>
+                <th>标题</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kbStats.unused.map((a) => (
+                <tr key={a.id}>
+                  <td><code>{a.id}</code></td>
+                  <td>{a.title}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
 
         <p className="admin-widget-muted">

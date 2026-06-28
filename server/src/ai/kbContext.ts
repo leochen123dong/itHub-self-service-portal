@@ -95,20 +95,30 @@ function pickBody(r: KbSearchResult): string {
  *     the KB and doing client-side keyword scoring. Slower, but always works
  *     when the vector endpoint is unavailable or not yet indexed.
  */
+export interface KbRef {
+  id: number;
+  title: string;
+}
+
+export interface KbContextResult {
+  context: string;
+  refs: KbRef[];
+}
+
 export async function buildKbContext(
   accessToken: string,
   query: string,
   topK = 3,
-): Promise<string> {
+): Promise<KbContextResult> {
   if (!query || !query.trim()) {
     console.log('[kb] empty query, skip');
-    return '';
+    return { context: '', refs: [] };
   }
   const customerTag = config.ithub.customerTag;
   const kbId = await resolveKbId(accessToken, customerTag);
   if (!kbId) {
     console.warn(`[kb] no KB available for customerTag=${customerTag}`);
-    return '';
+    return { context: '', refs: [] };
   }
   console.log(`[kb] querying kbId=${kbId} query="${query.slice(0, 60)}"`);
 
@@ -120,7 +130,7 @@ export async function buildKbContext(
     console.log('[kb] EmbeddingSearch returned nothing, falling back to keyword search');
     picked = await keywordSearch(accessToken, kbId, query, topK);
   }
-  if (!picked.length) return '';
+  if (!picked.length) return { context: '', refs: [] };
 
   console.log(`[kb] picked ${picked.length} articles with content`);
   // Hard cap on the injected context so MiniMax doesn't reject with
@@ -131,6 +141,7 @@ export async function buildKbContext(
   const TOTAL_MAX = 6000;
   const blocks: string[] = [];
   let totalLen = 0;
+  const refs: KbRef[] = [];
   for (let i = 0; i < picked.length; i += 1) {
     const r = picked[i];
     const body = r.body.length > PER_ARTICLE_MAX
@@ -143,15 +154,19 @@ export async function buildKbContext(
     }
     blocks.push(block);
     totalLen += block.length;
+    if (typeof r.id === 'number') {
+      refs.push({ id: r.id, title: r.title });
+    }
   }
 
-  return `以下是企业内部知识库的检索结果。请严格遵守：
+  const context = `以下是企业内部知识库的检索结果。请严格遵守：
 
 1. **只能使用下文中出现的事实**——服务器地址、URL、端口号、节点名、命令、步骤编号必须照搬原文，不要凭通用 IT 知识编造、改写或"补全"。
 2. 如果用户问题在 KB 中找不到对应答案，明确告诉用户"知识库中没有找到 XX 的相关内容"，不要硬答。
 3. 引用编号只用 [1]、[2] 这样的纯数字，文末不要再写引用说明段落。
 
 ---\n知识库内容：\n${blocks.join('\n\n')}`;
+  return { context, refs };
 }
 
 async function tryEmbeddingSearch(
@@ -335,7 +350,7 @@ function countOccurrences(haystack: string, needle: string): number {
  * /KnowledgeArticles?KnowledgeBaseId={kbId} returns the full list (verified:
  * 21 articles including the newest K100071). Use that as the primary path.
  */
-async function listAllArticles(accessToken: string, kbId: number): Promise<KbArticle[]> {
+export async function listAllArticles(accessToken: string, kbId: number): Promise<KbArticle[]> {
   // Primary: top-level listing, no page cap.
   try {
     const raw = await ithubFetch<any>(`/api/Knowledge/KnowledgeArticles`, {

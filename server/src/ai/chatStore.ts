@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { MiniMaxMessage } from './minimax.js';
 
+export interface KbRef {
+  id: number;
+  title: string;
+}
+
 interface ChatSession {
   chatId: string;
   userId: number;
@@ -13,6 +18,7 @@ interface ChatSession {
     role: 'user' | 'assistant';
     content: string;
     at: number;
+    kbRefs?: KbRef[];
   }>;
 }
 
@@ -67,10 +73,19 @@ export function appendUserMessage(chatId: string, content: string): ChatSession 
   return chat;
 }
 
-export function appendAssistantMessage(chatId: string, content: string): ChatSession | undefined {
+export function appendAssistantMessage(
+  chatId: string,
+  content: string,
+  kbRefs?: KbRef[],
+): ChatSession | undefined {
   const chat = chats.get(chatId);
   if (!chat) return undefined;
-  chat.messages.push({ role: 'assistant', content, at: Date.now() });
+  chat.messages.push({
+    role: 'assistant',
+    content,
+    at: Date.now(),
+    kbRefs: kbRefs && kbRefs.length ? kbRefs : undefined,
+  });
   chat.updatedAt = Date.now();
   return chat;
 }

@@ -46,6 +46,19 @@ export interface AdminStats {
   }>;
 }
 
+export interface KbUsageRecord {
+  articleId: number;
+  title: string;
+  useCount: number;
+  lastUsedAt: number;
+}
+
+export interface KbUsageStats {
+  ranking: KbUsageRecord[];
+  unused: Array<{ id: number; title: string }>;
+  totalKbArticles: number;
+}
+
 export interface ChatInitResponse {
   AIChatId: string;
   ChatTitle?: string;

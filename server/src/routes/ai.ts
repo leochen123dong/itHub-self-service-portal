@@ -13,6 +13,7 @@ import {
   toMiniMaxHistory,
 } from '../ai/chatStore.js';
 import { getChatRatings, getStats, rateMessage, type Rating } from '../ai/ratingStore.js';
+import { getKbUsageStats, recordKbUsage } from '../ai/kbUsageStore.js';
 
 interface ChatMessage {
   Role: 'User' | 'Assistant' | string;
@@ -80,7 +81,7 @@ aiRouter.post('/chat/init', requireSession, async (req, res): Promise<void> => {
   let messages: ChatMessage[] = [];
   if (initialMessage) {
     try {
-      const kbContext = await buildKbContext(session.accessToken, initialMessage, 3);
+      const { context: kbContext, refs } = await buildKbContext(session.accessToken, initialMessage, 3);
       if (kbContext) {
         console.log(`[kb] injected context length=${kbContext.length}`);
       }
@@ -88,7 +89,8 @@ aiRouter.post('/chat/init', requireSession, async (req, res): Promise<void> => {
         messages: toMiniMaxHistory(chat),
         extraSystem: kbContext ? [kbContext] : [],
       });
-      appendAssistantMessage(chat.chatId, reply.content);
+      appendAssistantMessage(chat.chatId, reply.content, refs);
+      recordKbUsage(refs);
       messages = [
         { Role: 'User', Content: initialMessage },
         { Role: 'Assistant', Content: reply.content },
@@ -131,7 +133,7 @@ aiRouter.post('/chat/message', requireSession, async (req, res): Promise<void> =
 
   appendUserMessage(aiChatId, content);
   try {
-    const kbContext = await buildKbContext(req.session!.accessToken, content, 3);
+    const { context: kbContext, refs } = await buildKbContext(req.session!.accessToken, content, 3);
     if (kbContext) {
       // Diagnostic: log exactly which articles we fed the model so we can
       // tell whether the model ignored them or we never sent the right ones.
@@ -141,7 +143,8 @@ aiRouter.post('/chat/message', requireSession, async (req, res): Promise<void> =
       messages: toMiniMaxHistory(getChat(aiChatId)!),
       extraSystem: kbContext ? [kbContext] : [],
     });
-    appendAssistantMessage(aiChatId, reply.content);
+    appendAssistantMessage(aiChatId, reply.content, refs);
+    recordKbUsage(refs);
     res.json({
       Messages: [{ Role: 'Assistant', Content: reply.content }],
       SuggestedActions: POST_REPLY_SUGGESTIONS,
@@ -295,4 +298,15 @@ aiRouter.get('/chat/:chatId/ratings', requireSession, (req, res): void => {
 // GET /api/ai/admin/stats — aggregate rating metrics
 aiRouter.get('/admin/stats', requireSession, requireAdmin, (_req, res): void => {
   res.json(getStats());
+});
+
+// GET /api/ai/admin/kb-usage — KB reference ranking + never-cited list
+aiRouter.get('/admin/kb-usage', requireSession, requireAdmin, async (req, res): Promise<void> => {
+  try {
+    const stats = await getKbUsageStats(req.session!.accessToken);
+    res.json(stats);
+  } catch (err) {
+    const zh = err instanceof Error ? err.message : '加载 KB 引用统计失败';
+    res.status(502).json({ error: { code: 'KB_USAGE_FAILED', message_zh: zh } });
+  }
 });

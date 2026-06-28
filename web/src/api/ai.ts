@@ -4,6 +4,7 @@ import type {
   AdminStats,
   ChatInitResponse,
   ChatMessageResponse,
+  KbUsageStats,
   RatingResponse,
   SuggestedAction,
 } from '../types/api';
@@ -37,4 +38,6 @@ export const aiApi = {
     ),
 
   getAdminStats: () => api.get<AdminStats>('/ai/admin/stats'),
+
+  getKbUsageStats: () => api.get<KbUsageStats>('/ai/admin/kb-usage'),
 };
