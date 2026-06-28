@@ -6,6 +6,7 @@ import { ApiError } from '../api/client';
 import { TicketCard } from '../components/TicketCard';
 import { TicketTimeline } from '../components/TicketTimeline';
 import { EmptyState } from '../components/EmptyState';
+import { KbDraftModal } from '../components/KbDraftModal';
 import { useUiStore } from '../store/uiStore';
 
 export function TicketsPage() {
@@ -21,6 +22,7 @@ export function TicketsPage() {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [kbModalOpen, setKbModalOpen] = useState(false);
 
   const loadList = async () => {
     setLoading(true);
@@ -164,6 +166,14 @@ export function TicketsPage() {
           </div>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <button
+              className="btn btn-ghost"
+              onClick={() => setKbModalOpen(true)}
+              disabled={!detail?.TicketId}
+              title="AI 总结当前工单生成 KB 草稿"
+            >
+              生成 KB 草稿
+            </button>
+            <button
               className="btn btn-primary"
               onClick={handleAddComment}
               disabled={submitting || !comment.trim()}
@@ -172,6 +182,11 @@ export function TicketsPage() {
             </button>
           </div>
         </div>
+        <KbDraftModal
+          open={kbModalOpen}
+          ticketId={String(detail?.TicketId ?? '')}
+          onClose={() => setKbModalOpen(false)}
+        />
       </div>
     );
   }

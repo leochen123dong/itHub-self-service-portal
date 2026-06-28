@@ -117,58 +117,142 @@ ticketsRouter.post('/by-checkpoint', requireSession, async (req, res): Promise<v
 // Body accepted from the caller: { templateId, ticketType, summary, description }.
 // ticketType maps 0=Incidents, 1=Problems, 2=Changes, 3=Requests. If missing
 // we look it up from the template detail.
+// Shared helper: create a ticket via the customer-scoped ITHub endpoint and
+// return the created ticket object. Throws ITHubError on upstream failure so
+// the caller can format its own error response.
+async function createTicketCore(opts: {
+  accessToken: string;
+  templateId: number;
+  ticketType?: number;
+  summary: string;
+  description?: string;
+}): Promise<Record<string, unknown>> {
+  if (!config.ithub.apiKey) {
+    throw new ITHubError(500, 'NO_API_KEY', '服务端未配置 ITHUB_API_KEY');
+  }
+  // Resolve ticket type if caller didn't pass it.
+  let type = opts.ticketType;
+  if (typeof type !== 'number') {
+    const detail = (await ithubFetch<any>(`/api/ServiceDesk/TicketTemplates/${opts.templateId}`, {
+      accessToken: opts.accessToken,
+    })) as Record<string, unknown>;
+    type = detail.TicketType as number;
+  }
+  const typeMap: Record<number, string> = {
+    0: 'TicketIncidents',
+    1: 'TicketProblems',
+    2: 'TicketChanges',
+    3: 'TicketRequests',
+  };
+  const sub = typeMap[type as number];
+  if (!sub) throw new ITHubError(400, 'INVALID', `未知 TicketType: ${type}`);
+  const path = `/api/ServiceDesk/Customers/${config.ithub.customerTag}/TicketTemplates/${opts.templateId}/${sub}`;
+  return (await ithubFetch<any>(path, {
+    method: 'POST',
+    apiKey: config.ithub.apiKey,
+    body: {
+      Summary: String(opts.summary).slice(0, 200),
+      Description: String(opts.description ?? opts.summary),
+      Priority: 3,
+      Impact: 3,
+      Urgency: 3,
+    },
+  })) as Record<string, unknown>;
+}
+
 ticketsRouter.post('/', requireSession, async (req, res): Promise<void> => {
   const { templateId, ticketType, summary, description } = req.body ?? {};
   if (typeof templateId !== 'number' || !summary) {
     res.status(400).json({ error: { code: 'INVALID', message_zh: '缺少 templateId / summary' } });
     return;
   }
-  if (!config.ithub.apiKey) {
-    res.status(500).json({
-      error: {
-        code: 'NO_API_KEY',
-        message_zh: '服务端未配置 ITHUB_API_KEY，请在 server/.env 和 Render Environment 中添加',
-      },
-    });
-    return;
-  }
-  // Resolve ticket type if caller didn't pass it.
-  let type = ticketType;
-  if (typeof type !== 'number') {
-    try {
-      const detail = (await ithubFetch<any>(`/api/ServiceDesk/TicketTemplates/${templateId}`, {
-        accessToken: req.session!.accessToken,
-      })) as Record<string, unknown>;
-      type = detail.TicketType;
-    } catch (e) {
-      const { status, body } = err(e, '获取模板类型失败');
-      res.status(status).json(body);
-      return;
-    }
-  }
-  const typeMap: Record<number, string> = { 0: 'TicketIncidents', 1: 'TicketProblems', 2: 'TicketChanges', 3: 'TicketRequests' };
-  const sub = typeMap[type as number];
-  if (!sub) {
-    res.status(400).json({ error: { code: 'INVALID', message_zh: `未知 TicketType: ${type}` } });
-    return;
-  }
-  const path = `/api/ServiceDesk/Customers/${config.ithub.customerTag}/TicketTemplates/${templateId}/${sub}`;
   try {
-    const data = await ithubFetch<any>(path, {
-      method: 'POST',
-      apiKey: config.ithub.apiKey,
-      body: {
-        Summary: String(summary).slice(0, 200),
-        Description: String(description ?? summary),
-        Priority: 3,
-        Impact: 3,
-        Urgency: 3,
-      },
+    const data = await createTicketCore({
+      accessToken: req.session!.accessToken,
+      templateId,
+      ticketType,
+      summary,
+      description,
     });
     res.json(data);
   } catch (e) {
+    if (e instanceof ITHubError && e.code === 'NO_API_KEY') {
+      res.status(500).json({
+        error: {
+          code: 'NO_API_KEY',
+          message_zh: '服务端未配置 ITHUB_API_KEY，请在 server/.env 和 Render Environment 中添加',
+        },
+      });
+      return;
+    }
     const { status, body } = err(e, '创建工单失败');
     res.status(status).json(body);
+  }
+});
+
+// Atomic "AI chat → ticket" pipeline: create the ticket AND post the chat
+// transcript as a journal so it shows up in ITHub's Journals view. If the
+// journal write fails, the ticket is still returned — we don't roll back a
+// successful create just because a side-effect failed.
+//
+// Body: { templateId, ticketType?, summary, description?, chatTranscript }
+// chatTranscript is an HTML string built by the client from the chat history
+// (e.g. "<p>用户：VPN 连不上</p><p>AI：...</p>").
+ticketsRouter.post('/escalate', requireSession, async (req, res): Promise<void> => {
+  const { templateId, ticketType, summary, description, chatTranscript } = req.body ?? {};
+  if (typeof templateId !== 'number' || !summary) {
+    res.status(400).json({ error: { code: 'INVALID', message_zh: '缺少 templateId / summary' } });
+    return;
+  }
+
+  // Step 1: create the ticket.
+  let ticket: Record<string, unknown>;
+  try {
+    ticket = await createTicketCore({
+      accessToken: req.session!.accessToken,
+      templateId,
+      ticketType,
+      summary,
+      description,
+    });
+  } catch (e) {
+    if (e instanceof ITHubError && e.code === 'NO_API_KEY') {
+      res.status(500).json({
+        error: {
+          code: 'NO_API_KEY',
+          message_zh: '服务端未配置 ITHUB_API_KEY，无法创建工单',
+        },
+      });
+      return;
+    }
+    const { status, body } = err(e, '创建工单失败');
+    res.status(status).json(body);
+    return;
+  }
+
+  const ticketId = ticket.TicketId ?? ticket.Id;
+  if (!ticketId) {
+    res.status(502).json({
+      error: { code: 'NO_TICKET_ID', message_zh: 'ITHub 未返回 TicketId' },
+    });
+    return;
+  }
+
+  // Step 2: post the chat transcript as a journal. Skip silently if empty.
+  const transcript = String(chatTranscript ?? '').trim();
+  if (!transcript) {
+    res.json({ ...ticket, journalPosted: false, journalError: 'chatTranscript 为空，跳过同步备注' });
+    return;
+  }
+
+  try {
+    await appendJournalAsHtml(String(ticketId), transcript, req.session!.accessToken);
+    res.json({ ...ticket, journalPosted: true });
+  } catch (e) {
+    // Don't 500 the whole request — the ticket exists, just the journal didn't.
+    const zh = e instanceof ITHubError ? e.upstreamMessage || 'ITHub 拒绝' : '备注同步失败';
+    console.warn(`[ticket] journal sync failed for ${ticketId}:`, (e as Error)?.message);
+    res.json({ ...ticket, journalPosted: false, journalError: zh });
   }
 });
 
@@ -187,6 +271,65 @@ ticketsRouter.put('/:id', requireSession, async (req, res): Promise<void> => {
   }
 });
 
+// Shared helper: append an HTML-formatted journal to a ticket. Auto-transitions
+// Registered (state 0) → Open (state 1) before writing. Throws ITHubError on
+// failure (caller can decide whether to swallow or surface).
+async function appendJournalAsHtml(
+  ticketId: string | number,
+  html: string,
+  accessToken: string,
+): Promise<Record<string, unknown>> {
+  // Pull ticket detail to learn TicketType and current state.
+  const ticket = (await ithubFetch<any>(`/api/ServiceDesk/Tickets/${ticketId}`, {
+    accessToken,
+  })) as Record<string, unknown>;
+
+  const ticketType = Number(ticket.TicketType ?? 0);
+  const stateFieldMap: Record<number, { field: string; endpoint: string }> = {
+    0: { field: 'IncidentStateUpdate', endpoint: 'TicketIncidents' },
+    1: { field: 'ProblemStateUpdate', endpoint: 'TicketProblems' },
+    2: { field: 'ChangeStateUpdate', endpoint: 'TicketChanges' },
+    3: { field: 'RequestStateUpdate', endpoint: 'TicketRequests' },
+  };
+  const stateInfo = stateFieldMap[ticketType] ?? stateFieldMap[0];
+  const currentState = Number(
+    ticket.IncidentState ?? ticket.ProblemState ?? ticket.ChangeState ?? ticket.RequestState ?? 0,
+  );
+
+  if (currentState === 0) {
+    try {
+      await ithubFetch<any>(`/api/ServiceDesk/${stateInfo.endpoint}/${ticketId}/State`, {
+        method: 'PUT',
+        accessToken,
+        body: {
+          [stateInfo.field]: 1,
+          TicketSuspendData: null,
+          TicketClosureData: null,
+        },
+      });
+    } catch (e) {
+      // Don't block the journal on a failed state transition — ITHub might
+      // already be in a non-Registered state, or the user lacks permission.
+      // If the journal POST also fails, the real error will surface.
+      console.warn(`[ticket] state transition skipped for ${ticketId}:`, (e as Error)?.message);
+    }
+  }
+
+  return (await ithubFetch<any>('/api/ServiceDesk/TicketJournals', {
+    method: 'POST',
+    accessToken,
+    body: {
+      TicketId: Number(ticketId),
+      Html: html,
+      PrivateToCustomer: false,
+      IsDraft: false,
+      ContactId: null,
+      ContactType: null,
+      IncludeChildren: false,
+    },
+  })) as Record<string, unknown>;
+}
+
 // Add a journal/comment to a ticket. ITHub rejects adding journals while
 // the ticket is in the "Registered" (state 0) state with
 // TicketInRegisteredStatusException, so we first transition to "Open"
@@ -202,70 +345,11 @@ ticketsRouter.post('/:id/journals', requireSession, async (req, res): Promise<vo
     return;
   }
 
-  // Pull ticket detail to learn TicketType and current IncidentState.
-  let ticket: Record<string, unknown> = {};
-  try {
-    ticket = (await ithubFetch<any>(`/api/ServiceDesk/Tickets/${ticketId}`, {
-      accessToken: req.session!.accessToken,
-    })) as Record<string, unknown>;
-  } catch (e) {
-    const { status, body } = err(e, '获取工单失败');
-    res.status(status).json(body);
-    return;
-  }
-
-  const ticketType = Number(ticket.TicketType ?? 0);
-  const stateFieldMap: Record<number, { field: string; endpoint: string }> = {
-    0: { field: 'IncidentStateUpdate', endpoint: 'TicketIncidents' },
-    1: { field: 'ProblemStateUpdate', endpoint: 'TicketProblems' },
-    2: { field: 'ChangeStateUpdate', endpoint: 'TicketChanges' },
-    3: { field: 'RequestStateUpdate', endpoint: 'TicketRequests' },
-  };
-  const stateInfo = stateFieldMap[ticketType] ?? stateFieldMap[0];
-
-  // For incidents, also need IncidentState specifically (TicketState is
-  // a generic "Registered"/"Open" string for the UI, but state transitions
-  // are driven by the typed field).
-  const currentState = Number(
-    ticket.IncidentState ?? ticket.ProblemState ?? ticket.ChangeState ?? ticket.RequestState ?? 0,
-  );
-
-  if (currentState === 0) {
-    try {
-      await ithubFetch<any>(`/api/ServiceDesk/${stateInfo.endpoint}/${ticketId}/State`, {
-        method: 'PUT',
-        accessToken: req.session!.accessToken,
-        body: {
-          [stateInfo.field]: 1,
-          TicketSuspendData: null,
-          TicketClosureData: null,
-        },
-      });
-    } catch (e) {
-      // Don't block the comment on a failed state transition — ITHub might
-      // already be in a non-Registered state, or the user lacks permission.
-      // If the journal POST below also fails, the real error will surface.
-      console.warn(`[ticket] state transition skipped for ${ticketId}:`, (e as Error)?.message);
-    }
-  }
-
   // Convert plain text to the <p>...</p> HTML ITHub expects.
   const html = '<p>' + content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
 
   try {
-    const data = await ithubFetch<any>('/api/ServiceDesk/TicketJournals', {
-      method: 'POST',
-      accessToken: req.session!.accessToken,
-      body: {
-        TicketId: Number(ticketId),
-        Html: html,
-        PrivateToCustomer: false,
-        IsDraft: false,
-        ContactId: null,
-        ContactType: null,
-        IncludeChildren: false,
-      },
-    });
+    const data = await appendJournalAsHtml(ticketId, html, req.session!.accessToken);
     res.json(data);
   } catch (e) {
     const { status, body } = err(e, '添加备注失败');

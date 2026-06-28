@@ -120,7 +120,9 @@ interface ChatState {
   sendMessage: (content: string) => Promise<void>;
   refreshSuggestions: (context?: number) => Promise<void>;
   rateMessage: (msgIndex: number, rating: 'up' | 'down') => Promise<void>;
-  escalateToTicket: (description?: string) => Promise<{ ticketId: number } | null>;
+  escalateToTicket: (
+    description?: string,
+  ) => Promise<{ ticketId: number; journalPosted?: boolean; journalError?: string } | null>;
   reset: () => void;
 }
 
@@ -266,26 +268,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
       throw new Error('未找到可用的工单模板');
     }
 
-    // Server now knows the correct ITHub create path
-    // (POST /api/ServiceDesk/Customers/{tag}/TicketTemplates/{id}/TicketIncidents)
-    // and forwards with the tenant ApiKey. We just send the user-input
-    // fields.
+    // Build the chat transcript as HTML for the journal sync. ITHub journals
+    // expect <p>...</p> with <br> for newlines — same convention as the
+    // server's appendJournalAsHtml helper.
+    const chatTranscript = messages
+      .filter((m) => m.Role === 'User' || m.Role === 'Assistant')
+      .map((m) => {
+        const label = m.Role === 'User' ? '用户' : 'AI';
+        const body = m.Content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>');
+        return `<p><strong>${label}：</strong>${body}</p>`;
+      })
+      .join('');
+
+    // Atomic create + journal-sync. Server returns the created ticket plus a
+    // `journalPosted` flag so we can warn the user if the journal write
+    // failed but the ticket still got created.
     try {
-      const created = await ticketsApi.create({
+      const created = await ticketsApi.escalate({
         templateId,
         ticketType,
         summary: finalDesc.slice(0, 200),
         description: finalDesc,
+        chatTranscript,
       });
       const ticketId = created?.TicketId ?? created?.ticketId ?? created?.Id ?? null;
       if (ticketId) {
         set({ createdTicketId: ticketId });
-        return { ticketId };
+        return {
+          ticketId,
+          journalPosted: created?.journalPosted,
+          journalError: created?.journalError,
+        };
       }
-      console.error('[ticket] create returned no id:', created);
+      console.error('[ticket] escalate returned no id:', created);
       return null;
     } catch (e) {
-      console.error('[ticket] create failed:', (e as Error)?.message);
+      console.error('[ticket] escalate failed:', (e as Error)?.message);
       return null;
     }
   },

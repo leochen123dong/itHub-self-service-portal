@@ -3,7 +3,9 @@ import { config } from '../config.js';
 import { requireSession } from '../session/middleware.js';
 import { requireAdmin } from '../middleware/admin.js';
 import { chatCompletion } from '../ai/minimax.js';
-import { buildKbContext } from '../ai/kbContext.js';
+import { buildKbContext, resolveKbId } from '../ai/kbContext.js';
+import { ithubFetch } from '../http/ithubClient.js';
+import { ITHubError } from '../http/errors.js';
 import {
   appendAssistantMessage,
   appendUserMessage,
@@ -309,4 +311,265 @@ aiRouter.get('/admin/kb-usage', requireSession, requireAdmin, async (req, res): 
     const zh = err instanceof Error ? err.message : '加载 KB 引用统计失败';
     res.status(502).json({ error: { code: 'KB_USAGE_FAILED', message_zh: zh } });
   }
+});
+
+// --- Feature B: AI summarization of a ticket into a KB draft --------
+
+// Helper: pull ticket detail + journals from ITHub and produce a flat text
+// blob suitable for sending to MiniMax as user-message content. Tolerates
+// partial failures (e.g. journals endpoint down) — falls back to whatever we
+// got.
+async function fetchTicketContent(
+  accessToken: string,
+  ticketId: string,
+): Promise<string> {
+  const parts: string[] = [];
+  try {
+    const ticket = (await ithubFetch<any>(`/api/ServiceDesk/Tickets/${ticketId}`, {
+      accessToken,
+      apiKey: config.ithub.apiKey,
+    })) as Record<string, unknown>;
+    if (ticket.Summary) parts.push(`主题：${String(ticket.Summary)}`);
+    if (ticket.Description) parts.push(`描述：${String(ticket.Description)}`);
+  } catch (e) {
+    parts.push(`（工单详情读取失败：${(e as Error)?.message}）`);
+  }
+
+  try {
+    const journals = (await ithubFetch<any>(
+      `/api/ServiceDesk/Tickets/${ticketId}/TicketJournals`,
+      { accessToken, apiKey: config.ithub.apiKey },
+    )) as any[];
+    if (Array.isArray(journals) && journals.length) {
+      parts.push('\n处理记录：');
+      for (const j of journals) {
+        const html = String(j.Html || j.Content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!html) continue;
+        const who = j.UserName || j.ContactName || '系统';
+        parts.push(`- [${who}] ${html}`);
+      }
+    }
+  } catch (e) {
+    parts.push(`（处理记录读取失败：${(e as Error)?.message}）`);
+  }
+
+  const blob = parts.join('\n');
+  // 8KB is generous for the prompt; longer blobs just slow MiniMax without
+  // improving the summary.
+  return blob.length > 8 * 1024 ? blob.slice(0, 8 * 1024) + '\n…(已截断)' : blob;
+}
+
+// Defensive JSON parser — MiniMax sometimes wraps the JSON in ```json fences
+// or adds prose around it. We pull the first {...} block.
+function parseKbDraftJson(raw: string): { title: string; summary: string; body: string } {
+  const trimmed = raw.trim();
+  try {
+    const obj = JSON.parse(trimmed);
+    if (obj && typeof obj === 'object') {
+      return {
+        title: String(obj.title ?? '').slice(0, 100) || '（未命名）',
+        summary: String(obj.summary ?? '').slice(0, 200),
+        body: String(obj.body ?? ''),
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+  const m = trimmed.match(/\{[\s\S]*\}/);
+  if (m) {
+    try {
+      const obj = JSON.parse(m[0]);
+      return {
+        title: String(obj.title ?? '').slice(0, 100) || '（未命名）',
+        summary: String(obj.summary ?? '').slice(0, 200),
+        body: String(obj.body ?? ''),
+      };
+    } catch {
+      /* fall through */
+    }
+  }
+  // Last resort: treat the entire response as body.
+  return { title: '（未命名）', summary: trimmed.slice(0, 200), body: trimmed };
+}
+
+// POST /api/ai/tickets/:id/kb-draft — generate a KB article draft from the
+// ticket's full content (description + journals). Returns { title, summary, body }
+// for the modal to render.
+aiRouter.post('/tickets/:id/kb-draft', requireSession, async (req, res): Promise<void> => {
+  const ticketId = req.params.id;
+  const accessToken = req.session!.accessToken;
+  try {
+    const content = await fetchTicketContent(accessToken, ticketId);
+    if (!content.trim()) {
+      res.status(400).json({
+        error: { code: 'EMPTY_TICKET', message_zh: '工单内容为空，无法生成 KB 草稿' },
+      });
+      return;
+    }
+    const prompt = `你是一名 IT 支持工程师。请根据以下工单内容写一篇企业内部知识库文章。仅输出 JSON：{"title":"≤30字","summary":"≤100字","body":"Markdown 正文，使用 ## 二级标题分节，操作步骤用有序列表"}。不要解释，不要 Markdown 代码块包裹。
+
+工单内容：
+${content}`;
+    const reply = await chatCompletion({
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.4,
+    });
+    const draft = parseKbDraftJson(reply.content);
+    res.json(draft);
+  } catch (err) {
+    const zh = err instanceof Error ? err.message : '生成 KB 草稿失败';
+    res.status(502).json({ error: { code: 'KB_DRAFT_FAILED', message_zh: zh } });
+  }
+});
+
+// POST /api/ai/kb/publish — write a KB article to ITHub. Tries several
+// endpoint/field-name combinations because ITHub's KB write API isn't
+// publicly documented. On any success returns { articleId, published: true }.
+// On total failure returns 502 with { code: 'KB_PUBLISH_FAILED', upstreamErrors, draft }
+// so the modal can offer a "copy draft" escape hatch.
+//
+// Body: { title, summary, body, knowledgeBaseId? }
+aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => {
+  const { title, summary, body, knowledgeBaseId } = req.body ?? {};
+  if (!title || !body) {
+    res.status(400).json({
+      error: { code: 'INVALID', message_zh: '缺少 title 或 body' },
+    });
+    return;
+  }
+  const accessToken = req.session!.accessToken;
+  const draft = { title, summary, body };
+
+  // 1. Resolve kbId. Caller-provided wins, else auto-discover.
+  let kbId: number | null = null;
+  if (typeof knowledgeBaseId === 'number') {
+    kbId = knowledgeBaseId;
+  } else {
+    try {
+      kbId = await resolveKbId(accessToken, config.ithub.customerTag);
+    } catch {
+      /* keep null */
+    }
+  }
+  if (!kbId) {
+    res.status(400).json({
+      error: {
+        code: 'NO_KB',
+        message_zh: '未找到可写入的知识库。请在工单页提供 knowledgeBaseId。',
+        draft,
+      },
+    });
+    return;
+  }
+
+  const errors: Array<{ endpoint: string; status: number; message: string }> = [];
+
+  // Attempt 1: nested path, PascalCase fields (mirrors listAllArticles)
+  try {
+    const data = (await ithubFetch<any>(
+      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+      {
+        method: 'POST',
+        accessToken,
+        body: {
+          Name: String(title),
+          Summary: String(summary ?? ''),
+          DescriptionText: String(body),
+          KnowledgeBaseId: kbId,
+          Active: true,
+        },
+      },
+    )) as Record<string, unknown>;
+    const articleId = Number(data.KnowledgeArticleId ?? data.Id ?? data.ArticleId);
+    if (articleId) {
+      res.json({ articleId, published: true });
+      return;
+    }
+    errors.push({
+      endpoint: 'nested-KnowledgeArticles',
+      status: 200,
+      message: 'ITHub 返回 200 但无 KnowledgeArticleId：' + JSON.stringify(data).slice(0, 200),
+    });
+  } catch (e) {
+    const err = e as ITHubError;
+    errors.push({
+      endpoint: 'nested-KnowledgeArticles',
+      status: err.status ?? 500,
+      message: err.upstreamMessage ?? err.message,
+    });
+  }
+
+  // Attempt 2: top-level, PascalCase
+  try {
+    const data = (await ithubFetch<any>('/api/Knowledge/KnowledgeArticles', {
+      method: 'POST',
+      accessToken,
+      body: {
+        Name: String(title),
+        Summary: String(summary ?? ''),
+        DescriptionText: String(body),
+        KnowledgeBaseId: kbId,
+        Active: true,
+      },
+    })) as Record<string, unknown>;
+    const articleId = Number(data.KnowledgeArticleId ?? data.Id ?? data.ArticleId);
+    if (articleId) {
+      res.json({ articleId, published: true });
+      return;
+    }
+    errors.push({
+      endpoint: 'top-KnowledgeArticles',
+      status: 200,
+      message: 'ITHub 返回 200 但无 KnowledgeArticleId',
+    });
+  } catch (e) {
+    const err = e as ITHubError;
+    errors.push({
+      endpoint: 'top-KnowledgeArticles',
+      status: err.status ?? 500,
+      message: err.upstreamMessage ?? err.message,
+    });
+  }
+
+  // Attempt 3: top-level, snake-shape with Title/Content/Identifier
+  try {
+    const data = (await ithubFetch<any>('/api/Knowledge/KnowledgeArticles', {
+      method: 'POST',
+      accessToken,
+      body: {
+        Title: String(title),
+        Content: String(body),
+        Summary: String(summary ?? ''),
+        Identifier: 'K' + Date.now(),
+      },
+    })) as Record<string, unknown>;
+    const articleId = Number(data.KnowledgeArticleId ?? data.Id ?? data.ArticleId);
+    if (articleId) {
+      res.json({ articleId, published: true });
+      return;
+    }
+    errors.push({
+      endpoint: 'top-KnowledgeArticles-snake',
+      status: 200,
+      message: 'ITHub 返回 200 但无 KnowledgeArticleId',
+    });
+  } catch (e) {
+    const err = e as ITHubError;
+    errors.push({
+      endpoint: 'top-KnowledgeArticles-snake',
+      status: err.status ?? 500,
+      message: err.upstreamMessage ?? err.message,
+    });
+  }
+
+  // All attempts failed. Return 502 with the draft so the client can offer
+  // the user a copy-to-clipboard escape hatch.
+  res.status(502).json({
+    error: {
+      code: 'KB_PUBLISH_FAILED',
+      message_zh: 'KB 发布失败：所有尝试都被 ITHub 拒绝。可复制草稿到 ITHub 后台手动粘贴。',
+      upstreamErrors: errors,
+      draft,
+    },
+  });
 });

@@ -61,9 +61,13 @@ export function ChatPanel({ routeChatId, variant = 'standalone' }: Props) {
     try {
       const r = await escalateToTicket();
       if (r?.ticketId) {
+        const successMsg =
+          r.journalPosted === false
+            ? `工单 #${r.ticketId} 已创建，但聊天记录同步备注失败：${r.journalError || '未知原因'}`
+            : `工单 #${r.ticketId} 已创建，聊天记录已同步到处理记录`;
         toast({
-          type: 'success',
-          message: `工单 #${r.ticketId} 已创建`,
+          type: r.journalPosted === false ? 'info' : 'success',
+          message: successMsg,
           action: { label: '查看工单', href: `/tickets/${r.ticketId}` },
         });
       } else {

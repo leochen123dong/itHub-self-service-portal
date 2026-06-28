@@ -40,4 +40,19 @@ export const aiApi = {
   getAdminStats: () => api.get<AdminStats>('/ai/admin/stats'),
 
   getKbUsageStats: () => api.get<KbUsageStats>('/ai/admin/kb-usage'),
+
+  // Ask MiniMax to summarize a ticket's full content (description + journals)
+  // into a 3-field KB article draft. The user reviews and edits before
+  // publishing to ITHub via kbPublish().
+  kbDraft: (ticketId: number | string) =>
+    api.post<{ title: string; summary: string; body: string }>(
+      `/ai/tickets/${ticketId}/kb-draft`,
+      {},
+    ),
+
+  kbPublish: (payload: { title: string; summary: string; body: string; knowledgeBaseId?: number }) =>
+    api.post<
+      | { articleId: number; published: true }
+      | { error: { code: string; message_zh: string; upstreamErrors?: any[]; draft?: any } }
+    >('/ai/kb/publish', payload),
 };
