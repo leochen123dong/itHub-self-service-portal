@@ -527,20 +527,25 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
     return;
   }
 
-  // Step 2: find the new articleId by Identifier. ITHub's read replica
-  // lags the write by ~500ms; retry a few times before giving up.
+  // Step 2: find the new articleId. ITHub rewrites our long
+  // "K{Date.now()}" Identifier to "K{articleId}" internally (observed
+  // in listProbe — K100101 was sent as K1782744889938 but stored as
+  // K100101). So we can't match by Identifier — we match by Summary.
+  // ITHub's read replica lags the write by ~3-5s on this tenant;
+  // retry with backoff up to ~15s.
   let articleId = 0;
-  for (let i = 0; i < 5 && articleId === 0; i++) {
-    await new Promise((r) => setTimeout(r, 500));
+  const targetSummary = String(title).slice(0, 200);
+  for (let i = 0; i < 10 && articleId === 0; i++) {
+    await new Promise((r) => setTimeout(r, 500 + i * 700));
     try {
       const list = (await ithubFetch<any[]>(
         `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
-        { accessToken, query: { $top: 200 } },
+        { accessToken, query: { $top: 50, $orderby: 'KnowledgeArticleId desc' } },
       )) as any[];
-      const ours = Array.isArray(list)
-        ? list.find((a) => a?.Identifier === identifier)
-        : null;
-      articleId = Number(ours?.KnowledgeArticleId ?? 0);
+      if (Array.isArray(list)) {
+        const ours = list.find((a) => a?.Summary === targetSummary);
+        articleId = Number(ours?.KnowledgeArticleId ?? 0);
+      }
     } catch {
       /* retry */
     }
@@ -550,7 +555,7 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
       articleId: 0,
       published: false,
       identifier,
-      note: 'POST 创建了草稿但 GET 列表 5 次都找不到。请到 ITHub admin 按 Identifier 查找，可能需要手动完成编辑。',
+      note: 'POST 创建了草稿但 15s 内 GET 列表找不到匹配 Summary 的文章。请到 ITHub admin 手动按 Summary 查找。',
     });
     return;
   }
@@ -718,6 +723,50 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
 
   if (dryRun) {
     res.json({ kbId, dryRun: true, existingSample, existingKeys: existingSample ? Object.keys(existingSample) : [] });
+    return;
+  }
+
+  // Optional: fill content of an EXISTING article that was created
+  // without content (e.g. K100091, K100101 from earlier 2-step runs
+  // where step 2 GET timed out and we never reached step 3 PUT).
+  // Body: { fillExisting: <articleId>, fillTitle, fillBody }
+  if (typeof req.body?.fillExisting === 'number') {
+    const articleId = req.body.fillExisting as number;
+    const fillTitle = String(req.body.fillTitle ?? '').slice(0, 200) || '已修复内容';
+    const fillBody = String(req.body.fillBody ?? '');
+    try {
+      const data = await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeArticles/${articleId}`,
+        {
+          method: 'PUT',
+          accessToken,
+          body: {
+            Identifier: `K${articleId}`,
+            CustomerId: 3, CustomerTag: config.ithub.customerTag,
+            KnowledgeBaseId: kbId,
+            ParentKnowledgeCategoryId: 4,
+            KnowledgeCategoryId: 5, KnowledgeCategoryName: 'Hardware',
+            KnowledgeCategoryDescription: '',
+            Summary: fillTitle,
+            DescriptionText: fillBody,
+            KnowledgeArticleStatus: 1, Active: true,
+            AccessFlags: 2147483647,
+            KnowledgeArticleAccessFlags: 2147483647,
+            KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+          },
+        },
+      );
+      res.json({ fillExisting: articleId, ok: true, response: data });
+    } catch (e) {
+      const err = e as ITHubError;
+      res.status(502).json({
+        error: {
+          code: 'FILL_FAILED',
+          message_zh: 'PUT 失败：' + (err.upstreamMessage ?? err.message ?? 'ITHub 拒绝'),
+          upstreamErrors: [{ endpoint: 'PUT top-level', status: err.status ?? 500, message: err.upstreamMessage ?? err.message ?? '' }],
+        },
+      });
+    }
     return;
   }
 
