@@ -727,6 +727,27 @@ input, textarea, select {
   background: #e3f4e8;
   color: #1f7a36;
 }
+.kb-version-badge {
+  display: inline-block;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #e8f0fe, #f3e8ff);
+  color: #4a3a8c;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.kb-version-badge-sm {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #e8f0fe, #f3e8ff);
+  color: #4a3a8c;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
 
 /* === Timeline === */
 .timeline {

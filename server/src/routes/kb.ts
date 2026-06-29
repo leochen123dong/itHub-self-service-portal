@@ -3,6 +3,7 @@ import { ithubFetch } from '../http/ithubClient.js';
 import { ITHubError } from '../http/errors.js';
 import { config } from '../config.js';
 import { resolveKbId } from '../ai/kbContext.js';
+import { getVersion } from '../ai/kbVersionStore.js';
 import { requireSession } from '../session/middleware.js';
 
 export const kbRouter = Router();
@@ -37,7 +38,15 @@ kbRouter.get('/articles', requireSession, async (req, res): Promise<void> => {
       `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
       { accessToken: req.session!.accessToken },
     );
-    res.json(data);
+    // Attach the local version counter to each article so the list view
+    // can show "v3" alongside the title without a second round-trip.
+    const withVersions = Array.isArray(data)
+      ? data.map((a) => ({
+          ...a,
+          Version: getVersion(Number(a?.KnowledgeArticleId)),
+        }))
+      : data;
+    res.json(withVersions);
   } catch (e) {
     const { status, body } = err(e, '获取知识库文章失败');
     res.status(status).json(body);
@@ -50,7 +59,10 @@ kbRouter.get('/articles/:id', requireSession, async (req, res): Promise<void> =>
       `/api/Knowledge/KnowledgeArticles/${req.params.id}`,
       { accessToken: req.session!.accessToken },
     );
-    res.json(data);
+    // Attach local version counter. 0 = we've never seen a publish for
+    // this article (only fetched/read). Articles that were published or
+    // repaired via our /kb/publish / kbRepair will have Version >= 1.
+    res.json({ ...data, Version: getVersion(Number(req.params.id)) });
   } catch (e) {
     const { status, body } = err(e, '获取文章失败');
     res.status(status).json(body);

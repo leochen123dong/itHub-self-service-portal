@@ -16,6 +16,7 @@ import {
 } from '../ai/chatStore.js';
 import { getChatRatings, getStats, rateMessage, type Rating } from '../ai/ratingStore.js';
 import { getKbUsageStats, recordKbUsage } from '../ai/kbUsageStore.js';
+import { bumpVersion, getVersion } from '../ai/kbVersionStore.js';
 
 interface ChatMessage {
   Role: 'User' | 'Assistant' | string;
@@ -605,7 +606,8 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
         },
       },
     );
-    res.json({ articleId, published: true, identifier });
+    const version = bumpVersion(articleId);
+    res.json({ articleId, published: true, identifier, version });
   } catch (e) {
     // Draft is created; the PUT just failed to fill content. Surface
     // the error so the user can retry the publish, but keep the
@@ -816,6 +818,8 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       return;
     }
 
+    const version = bumpVersion(articleId);
+
     // Read back to confirm.
     await new Promise((r) => setTimeout(r, 2000));
     let after: { summary: unknown; descriptionLen: number | null; descriptionPreview: string | null } = {
@@ -846,6 +850,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       articleId,
       before,
       after,
+      version,
       excerpt: after.descriptionPreview,
       note:
         (after.descriptionLen ?? 0) > 0

@@ -50,6 +50,7 @@ function KbVersionInfo({ article }: { article: KnowledgeArticle }) {
   const createdBy = safeStr(article.CreatedBy);
   const modifiedBy = safeStr(article.ModifiedBy);
   const category = safeStr(article.KnowledgeCategoryName);
+  const version = typeof article.Version === 'number' ? article.Version : 0;
   return (
     <div className="kb-version-info">
       <div className="kb-version-cell">
@@ -61,6 +62,10 @@ function KbVersionInfo({ article }: { article: KnowledgeArticle }) {
         <span className="kb-version-label">最后更新</span>
         <span className="kb-version-value">{formatDate(safeStr(article.ModifiedUtc)) || '—'}</span>
         {modifiedBy && <span className="kb-version-author">by {modifiedBy}</span>}
+      </div>
+      <div className="kb-version-cell">
+        <span className="kb-version-label">版本</span>
+        <span className="kb-version-badge">v{version}</span>
       </div>
       {status && (
         <div className="kb-version-cell">
@@ -177,9 +182,14 @@ export function KbPage() {
               className="kb-result"
               onClick={() => openKbArticle(a.KnowledgeArticleId)}
             >
-              <h4 className="kb-result-title">
-                {safeStr(a.Title) || safeStr(a.Name) || safeStr(a.Summary) || `文章 #${a.KnowledgeArticleId}`}
-              </h4>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h4 className="kb-result-title" style={{ margin: 0, flex: 1 }}>
+                  {safeStr(a.Title) || safeStr(a.Name) || safeStr(a.Summary) || `文章 #${a.KnowledgeArticleId}`}
+                </h4>
+                {typeof a.Version === 'number' && a.Version > 0 && (
+                  <span className="kb-version-badge-sm">v{a.Version}</span>
+                )}
+              </div>
               <p className="kb-result-snippet">
                 {safeStr(a.Summary || a.Description).slice(0, 200) || '（无摘要）'}
               </p>

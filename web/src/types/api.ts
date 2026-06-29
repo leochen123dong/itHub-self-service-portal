@@ -102,6 +102,11 @@ export interface KnowledgeArticle {
   KnowledgeArticleStatus?: number;
   KnowledgeCategoryName?: string;
   Identifier?: string;
+  // Local version counter — incremented by /kb/publish + kbRepair on
+  // each successful PUT. 0 means we've never touched this article
+  // (only fetched/read). The list/detail handlers always include this
+  // field, defaulting to 0.
+  Version?: number;
 }
 
 export interface TicketTemplate {
