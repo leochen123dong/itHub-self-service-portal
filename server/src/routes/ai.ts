@@ -424,15 +424,21 @@ ${content}`;
 
 // POST /api/ai/kb/publish — write a KB article to ITHub.
 //
-// Verified working combination (from _debug probe, attempt 14 of commit
-// 6f126d3 — the only one that actually wrote a row):
-//   POST /api/Knowledge/KnowledgeBases/{kbId}/KnowledgeArticles
-//   Body: full 16-field shape copied from K100003 (existingSample),
-//   with `CustomerTag` set to the SESSION's customer tag (config.ithub
-//   .customerTag) — NOT the existingSample's "demo" tag. ITHub silently
-//   rolls back cross-customer writes (returns 200 but doesn't write).
-//   ITHub returns 200 with body=null on success; we GET the list right
-//   after and match by Identifier to recover the new articleId.
+// 2-step flow (verified by _debug probe in commits 6f126d3 + bb8af69):
+//   1. POST creates a draft with metadata (Identifier, CustomerId/Tag,
+//      KnowledgeBaseId, ParentKnowledgeCategoryId, KnowledgeCategoryId).
+//      ITHub accepts it with 200 + null body, but **silently drops the
+//      content fields** (Summary, DescriptionText, Active, Status) —
+//      the resulting row has no title, no body, and Status=Draft.
+//   2. GET the list, match by Identifier → articleId.
+//   3. PUT the article at /KnowledgeBases/{kbId}/KnowledgeArticles/{id}
+//      with the content fields (Summary, DescriptionText, Active=1,
+//      KnowledgeArticleStatus=1). ITHub's PUT handler writes content
+//      correctly.
+//
+// `CustomerTag` must be the SESSION's customer tag (config.ithub
+// .customerTag) — not the existingSample's "demo" tag. Mismatched
+// tags get the silent-drop behavior even on the metadata fields.
 //
 // Body: { title, summary, body, knowledgeBaseId? }
 aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => {
@@ -474,18 +480,86 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
   // a different millisecond.
   const identifier = 'K' + Date.now();
 
-  // 3. POST the full K100003 shape. CustomerTag MUST be the session's
-  // customer tag (config.ithub.customerTag), not the existingSample's
-  // tag — ITHub silently rolls back writes where CustomerTag doesn't
-  // match the session customer. CustomerId=3 is the KB customer ID we
-  // discovered via existingSample; the read-only expanded fields
-  // (ParentKnowledgeCategoryId, KnowledgeCategoryName, etc.) are sent
-  // because ITHub's PUT handler validates them.
+  // Step 1: POST creates a draft with metadata. Send every field from
+  // K100003 (including read-only expanded ones) so ITHub's row
+  // validation passes — content fields are still ignored here, we set
+  // them in step 3.
   try {
     await ithubFetch<any>(
       `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
       {
         method: 'POST',
+        accessToken,
+        body: {
+          Identifier: identifier,
+          CustomerId: 3,
+          CustomerTag: config.ithub.customerTag,
+          KnowledgeBaseId: kbId,
+          ParentKnowledgeCategoryId: 4,
+          KnowledgeCategoryId: 5,
+          KnowledgeCategoryName: 'Hardware',
+          KnowledgeCategoryDescription: '',
+          // Content fields sent on POST — ITHub silently drops these, but
+          // the PUT in step 3 re-sends them so it's the source of truth.
+          Summary: String(title).slice(0, 200),
+          DescriptionText: String(body),
+          KnowledgeArticleStatus: 1,
+          Active: true,
+          AccessFlags: 2147483647,
+          KnowledgeArticleAccessFlags: 2147483647,
+          KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+        },
+      },
+    );
+  } catch (e) {
+    const err = e as ITHubError;
+    res.status(502).json({
+      error: {
+        code: 'KB_PUBLISH_FAILED',
+        message_zh: 'KB 创建草稿失败：' + (err.upstreamMessage ?? err.message ?? 'ITHub 拒绝'),
+        upstreamErrors: [{ endpoint: 'POST nested', status: err.status ?? 500, message: err.upstreamMessage ?? err.message ?? '' }],
+        draft,
+      },
+    });
+    return;
+  }
+
+  // Step 2: find the new articleId by Identifier. ITHub's read replica
+  // lags the write by ~400ms; retry a couple times before giving up.
+  let articleId = 0;
+  for (let i = 0; i < 5 && articleId === 0; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    try {
+      const list = (await ithubFetch<any[]>(
+        `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+        { accessToken, query: { $top: 200 } },
+      )) as any[];
+      const ours = Array.isArray(list)
+        ? list.find((a) => a?.Identifier === identifier)
+        : null;
+      articleId = Number(ours?.KnowledgeArticleId ?? 0);
+    } catch {
+      /* retry */
+    }
+  }
+  if (!articleId) {
+    res.json({
+      articleId: 0,
+      published: false,
+      identifier,
+      note: 'POST 创建了草稿但 GET 列表 5 次都找不到。请到 ITHub admin 按 Identifier 查找，可能需要手动完成编辑。',
+    });
+    return;
+  }
+
+  // Step 3: PUT the content. ITHub's PUT to the article's nested URL
+  // is what actually writes Summary, DescriptionText, Status, and
+  // Active. This is the step that fills in the visible body.
+  try {
+    await ithubFetch<any>(
+      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles/${articleId}`,
+      {
+        method: 'PUT',
         accessToken,
         body: {
           Identifier: identifier,
@@ -506,44 +580,22 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
         },
       },
     );
-
-    // 4. GET the list and find the row we just wrote by Identifier.
-    // Wait briefly first — ITHub's read replica can lag the write by
-    // a fraction of a second on free tenants.
-    await new Promise((r) => setTimeout(r, 400));
-    const list = (await ithubFetch<any[]>(
-      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
-      { accessToken, query: { $top: 50 } },
-    )) as any[];
-    const ours = Array.isArray(list)
-      ? list.find((a) => a?.Identifier === identifier)
-      : null;
-    const articleId = Number(ours?.KnowledgeArticleId ?? 0);
-    if (articleId) {
-      res.json({ articleId, published: true, identifier });
-      return;
-    }
-    // Write succeeded (200) but we couldn't find the row in the next 50.
-    // Treat as success anyway — the user can find it via the Identifier
-    // in the ITHub admin.
-    res.json({
-      articleId: 0,
-      published: true,
-      identifier,
-      note: 'ITHub 接受 POST 但 GET 列表前 50 找不到对应 Identifier。请到 ITHub admin 按 Identifier 查找。',
-    });
-    return;
+    res.json({ articleId, published: true, identifier });
   } catch (e) {
+    // Draft is created; the PUT just failed to fill content. Surface
+    // the error so the user can retry the publish, but keep the
+    // articleId so they can find the draft in admin.
     const err = e as ITHubError;
     res.status(502).json({
       error: {
-        code: 'KB_PUBLISH_FAILED',
-        message_zh: 'KB 发布失败：' + (err.upstreamMessage ?? err.message ?? 'ITHub 拒绝'),
-        upstreamErrors: [{ endpoint: 'nested-KnowledgeArticles', status: err.status ?? 500, message: err.upstreamMessage ?? err.message ?? '' }],
+        code: 'KB_PUBLISH_PARTIAL',
+        message_zh: 'KB 草稿已创建 (#' + articleId + ') 但填写内容失败：' + (err.upstreamMessage ?? err.message ?? 'ITHub 拒绝'),
+        upstreamErrors: [{ endpoint: 'PUT nested', status: err.status ?? 500, message: err.upstreamMessage ?? err.message ?? '' }],
+        articleId,
+        identifier,
         draft,
       },
     });
-    return;
   }
 });
 
