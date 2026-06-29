@@ -1129,6 +1129,79 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     /* list fetch failed — leave landedInList empty */
   }
 
+  // Optional explicit target id+body for the PUT probes (e.g. 100091).
+  // If set, the probe runs PUT-only attempts against this article instead
+  // of POST attempts. Used to test which body-field name ITHub's PUT
+  // handler actually writes for Description / Status / Active.
+  const targetArticleId = typeof req.body?.targetArticleId === 'number'
+    ? req.body.targetArticleId
+    : null;
+  const targetBody = typeof req.body?.targetBody === 'string'
+    ? req.body.targetBody
+    : 'PUT 探测 body 内容';
+  if (targetArticleId) {
+    const putAttempts: Attempt[] = [];
+    const htmlBody = `<p>${targetBody.replace(/\n/g, '<br>')}</p>`;
+    const mk = (label: string, body: Record<string, unknown>, extraHeaders?: Record<string, string>) => ({
+      label, method: 'PUT' as const,
+      path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles/${targetArticleId}`,
+      body, ...(extraHeaders ? { extraHeaders } : {}),
+      status: 0, ok: false, bodyExcerpt: '',
+      identifier: `PUT_${targetArticleId}_${label.slice(0, 20)}`,
+    });
+    putAttempts.push(mk('DescriptionText (plain)', { DescriptionText: targetBody }));
+    putAttempts.push(mk('DescriptionText (HTML)', { DescriptionText: htmlBody }));
+    putAttempts.push(mk('Body', { Body: targetBody }));
+    putAttempts.push(mk('Body (HTML)', { Body: htmlBody }));
+    putAttempts.push(mk('Content', { Content: targetBody }));
+    putAttempts.push(mk('Description', { Description: targetBody }));
+    putAttempts.push(mk('DescriptionHtml', { DescriptionHtml: htmlBody }));
+    putAttempts.push(mk('BodyHtml', { BodyHtml: htmlBody }));
+    putAttempts.push(mk('Full K100003 shape (PUT)', {
+      Identifier: `K100091_PUT_TEST`,
+      CustomerId: 3, CustomerTag: config.ithub.customerTag,
+      KnowledgeBaseId: kbId, ParentKnowledgeCategoryId: 4,
+      KnowledgeCategoryId: 5, KnowledgeCategoryName: 'Hardware',
+      KnowledgeCategoryDescription: '',
+      Summary: 'K100091 PUT 测试',
+      DescriptionText: targetBody,
+      KnowledgeArticleStatus: 1, Active: true,
+      AccessFlags: 2147483647,
+      KnowledgeArticleAccessFlags: 2147483647,
+      KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+    }));
+    for (const a of putAttempts) {
+      try {
+        const data = (await ithubFetch<any>(a.path, {
+          method: a.method, accessToken, body: a.body,
+          ...(a.extraHeaders ? { headers: a.extraHeaders } : {}),
+        })) as Record<string, unknown> | null | undefined;
+        a.status = 200;
+        a.bodyExcerpt = JSON.stringify(data ?? null).slice(0, 500);
+      } catch (e) {
+        const err = e as any;
+        a.status = err?.status ?? 500;
+        const pieces: string[] = [];
+        if (err?.upstreamMessage) pieces.push(err.upstreamMessage);
+        if (err?.message && err.message !== err.upstreamMessage) pieces.push(err.message);
+        if (err?.body && typeof err.body === 'string') pieces.push('BODY: ' + err.body.slice(0, 300));
+        a.bodyExcerpt = pieces.join(' | ').slice(0, 600) || '(no detail)';
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    res.json({
+      kbId,
+      probe: 'PUT-only against existing article',
+      targetArticleId,
+      targetBody,
+      putAttempts: putAttempts.map(({ label, path, method, body, status, bodyExcerpt }) => ({
+        label, path, method, body, status, bodyExcerpt,
+      })),
+      note: '检查 ITHub admin K100091 的 Description 框 —— 找到有内容的 field name。',
+    });
+    return;
+  }
+
   res.json({
     kbId,
     dryRun: false,
