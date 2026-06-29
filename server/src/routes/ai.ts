@@ -665,12 +665,13 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
 
   type Attempt = {
     label: string;
-    method: 'POST';
+    method: 'POST' | 'PUT';
     path: string;
     body: Record<string, unknown>;
     status: number;
     ok: boolean;
     bodyExcerpt: string;
+    identifier: string;
     articleId?: number;
   };
 
@@ -696,7 +697,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       CustomerTag: 'demo',
       Active: true,
     },
-    status: 0, ok: false, bodyExcerpt: '',
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier,
   });
 
   // 2. top-level + same full payload
@@ -713,7 +714,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       CustomerTag: 'demo',
       Active: true,
     },
-    status: 0, ok: false, bodyExcerpt: '',
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'a',
   });
 
   // 3. nested + minimal (no CustomerId/Tag)
@@ -728,7 +729,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       KnowledgeBaseId: kbId,
       Active: true,
     },
-    status: 0, ok: false, bodyExcerpt: '',
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'b',
   });
 
   // 4. top-level + minimal
@@ -743,7 +744,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       KnowledgeBaseId: kbId,
       Active: true,
     },
-    status: 0, ok: false, bodyExcerpt: '',
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'c',
   });
 
   // 5. nested + just Identifier + Summary (test if KB ID alone is enough)
@@ -755,7 +756,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       Identifier: probeIdentifier + 'd',
       Summary: probeTitle,
     },
-    status: 0, ok: false, bodyExcerpt: '',
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'd',
   });
 
   // 6. top-level + bare-minimum (only Identifier, no Summary at all)
@@ -766,7 +767,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     body: {
       Identifier: probeIdentifier + 'e',
     },
-    status: 0, ok: false, bodyExcerpt: '',
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'e',
   });
 
   // 7. nested + every field from existingSample (KnowledgeCategoryId,
@@ -793,7 +794,78 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       KnowledgeArticleAccessFlags: 2147483647,
       KnowledgeArticleServiceDeskAccessFlags: 2147483647,
     },
-    status: 0, ok: false, bodyExcerpt: '',
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'f',
+  });
+
+  // 8. PUT nested (OData "create or update" — id=0 means "create").
+  // POST with our user accessToken returns 200 but the row never lands.
+  // PUT is the canonical OData write verb in many ITHub-style APIs.
+  attempts.push({
+    label: 'PUT nested id=0 (OData create-or-update)',
+    method: 'PUT',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles/0`,
+    body: {
+      Identifier: probeIdentifier + 'g',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'g',
+  });
+
+  // 9. POST /api/Admin/Knowledge/Articles — admin-scoped path
+  attempts.push({
+    label: 'POST /api/Admin/Knowledge/Articles',
+    method: 'POST',
+    path: `/api/Admin/Knowledge/Articles`,
+    body: {
+      Identifier: probeIdentifier + 'h',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'h',
+  });
+
+  // 10. POST /api/Knowledge/Admin/KnowledgeArticles — admin-suffixed
+  attempts.push({
+    label: 'POST /api/Knowledge/Admin/KnowledgeArticles',
+    method: 'POST',
+    path: `/api/Knowledge/Admin/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'i',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'i',
+  });
+
+  // 11. POST nested with apiKey (no accessToken). Tenant-level write
+  // may need the tenant ApiKey, like ticket create does.
+  attempts.push({
+    label: 'POST nested with apiKey (no accessToken)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'j',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'j',
   });
 
   // Execute each attempt serially. ITHub rate-limits, so 1s spacing is
@@ -838,14 +910,47 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     await new Promise((r) => setTimeout(r, 250));
   }
 
+  // Critical: ITHub returns 200 even when the row isn't written. The only
+  // ground truth is "does my Identifier actually appear in the KB list?"
+  // GET the list (top 200 is plenty for a tenant with <100 articles) and
+  // mark each attempt whose identifier appears. This is the single most
+  // important signal — without it we can't tell a real write from a fake
+  // success.
+  let landedInList: Record<string, number> = {};
+  try {
+    await new Promise((r) => setTimeout(r, 400));
+    const list = (await ithubFetch<any[]>(
+      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+      { accessToken, query: { $top: 200 } },
+    )) as any[];
+    if (Array.isArray(list)) {
+      for (const a of attempts) {
+        const hit = list.find((x) => x?.Identifier === a.identifier);
+        if (hit) {
+          landedInList[a.identifier] = Number(hit.KnowledgeArticleId ?? 0) || -1;
+          a.articleId = landedInList[a.identifier];
+          a.ok = true;
+        }
+      }
+    }
+  } catch {
+    /* list fetch failed — leave landedInList empty */
+  }
+
   res.json({
     kbId,
     dryRun: false,
     note: '每个 attempt 都会真在 ITHub 创建一行 __PROBE__ 数据。请测完后到 ITHub admin Knowledge 后台手动删除。',
     existingSample,
     existingKeys: existingSample ? Object.keys(existingSample) : [],
-    attempts: attempts.map(({ label, path, body, status, ok, bodyExcerpt, articleId }) => ({
-      label, path, body, status, ok, bodyExcerpt, articleId,
+    // The ground truth: which probe Identifiers actually landed in the KB
+    // list after all attempts ran. ITHub's 200 response is unreliable —
+    // only this map tells us which shape actually writes. Keyed by
+    // Identifier (suffix-less for attempt 1, a/b/c… for 2-11), value is
+    // the KnowledgeArticleId ITHub assigned, or -1 if present-but-no-id.
+    landedInList,
+    attempts: attempts.map(({ label, path, method, body, status, ok, bodyExcerpt, articleId, identifier }) => ({
+      label, path, method, body, status, ok, bodyExcerpt, articleId, identifier,
     })),
   });
 });
