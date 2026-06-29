@@ -726,6 +726,108 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     return;
   }
 
+  // fillProbeV3: test multipart/form-data. ITHub admin UI might upload
+  // body via form-data instead of JSON. Probe with different field
+  // names + content-types to find what gets persisted.
+  if (typeof req.body?.fillProbeV3 === 'number') {
+    const articleId = req.body.fillProbeV3 as number;
+    // Use raw fetch (not ithubFetch) so we can control the wire format.
+    const baseUrl = config.ithub.baseUrl;
+    const accessToken = req.session!.accessToken;
+    const probeBody = `__PROBEV3_BODY__<p>这是 form-data body 测试</p>`;
+    const results: any[] = [];
+
+    const tryRequest = async (label: string, method: string, path: string, body: string | undefined, contentType: string, extraHeaders: Record<string, string> = {}) => {
+      const url = new URL(path, baseUrl);
+      url.searchParams.set('customerTag', config.ithub.customerTag);
+      const headers: Record<string, string> = {
+        ...(accessToken ? { AccessToken: accessToken } : {}),
+        ...(config.ithub.apiKey ? { ApiKey: config.ithub.apiKey } : {}),
+        ...extraHeaders,
+      };
+      if (contentType) headers['Content-Type'] = contentType;
+      try {
+        const r = await fetch(url.toString(), { method, headers, body, signal: AbortSignal.timeout(15000) });
+        const text = await r.text();
+        results.push({ label, method, path, status: r.status, ct: r.headers.get('content-type'), excerpt: text.slice(0, 300) });
+      } catch (e) {
+        results.push({ label, method, path, status: 0, error: (e as Error)?.message });
+      }
+    };
+
+    const readBack = async (label: string) => {
+      try {
+        const r = await ithubFetch<any>(`/api/Knowledge/KnowledgeArticles/${articleId}`, { accessToken });
+        const found: { field: string; value: string }[] = [];
+        for (const [k, v] of Object.entries(r as Record<string, unknown>)) {
+          if (typeof v === 'string' && v.includes('__PROBEV3_BODY__')) {
+            found.push({ field: k, value: v.slice(0, 100) });
+          }
+        }
+        results.push({ label: `READBACK after ${label}`, status: 200, summary: (r as any).Summary, found });
+      } catch (e) {
+        results.push({ label: `READBACK after ${label}`, status: 0, error: (e as Error)?.message });
+      }
+    };
+
+    // Probe 1: multipart/form-data with field "file" (the default ITHub
+    // admin form upload convention)
+    {
+      const boundary = '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
+      const parts: string[] = [];
+      parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="file"\r\nContent-Type: text/html\r\n\r\n${probeBody}\r\n`);
+      parts.push(`--${boundary}--\r\n`);
+      const body = parts.join('');
+      await tryRequest('multipart field=file', 'POST', `/api/Knowledge/KnowledgeArticles/${articleId}/Content`, body, `multipart/form-data; boundary=${boundary}`);
+      await readBack('multipart field=file');
+    }
+    // Probe 2: multipart with field "Html"
+    {
+      const boundary = '----WebKitFormBoundary' + Math.random().toString(36).slice(2);
+      const parts: string[] = [];
+      parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="Html"\r\n\r\n${probeBody}\r\n`);
+      parts.push(`--${boundary}--\r\n`);
+      await tryRequest('multipart field=Html', 'POST', `/api/Knowledge/KnowledgeArticles/${articleId}/Content`, parts.join(''), `multipart/form-data; boundary=${boundary}`);
+      await readBack('multipart field=Html');
+    }
+    // Probe 3: application/x-www-form-urlencoded
+    {
+      const body = `Html=${encodeURIComponent(probeBody)}&Text=${encodeURIComponent(probeBody)}`;
+      await tryRequest('form-urlencoded', 'POST', `/api/Knowledge/KnowledgeArticles/${articleId}/Content`, body, 'application/x-www-form-urlencoded');
+      await readBack('form-urlencoded');
+    }
+    // Probe 4: PUT with form-urlencoded
+    {
+      const body = `DescriptionText=${encodeURIComponent(probeBody)}`;
+      await tryRequest('PUT form-urlencoded', 'PUT', `/api/Knowledge/KnowledgeArticles/${articleId}`, body, 'application/x-www-form-urlencoded');
+      await readBack('PUT form-urlencoded');
+    }
+    // Probe 5: PUT with JSON containing DescriptionText + Summary
+    {
+      const body = JSON.stringify({
+        Summary: '__PROBEV3_SUMMARY__' + new Date().toISOString(),
+        DescriptionText: probeBody,
+        Body: probeBody,
+        Content: probeBody,
+      });
+      await tryRequest('PUT JSON multi body fields', 'PUT', `/api/Knowledge/KnowledgeArticles/${articleId}`, body, 'application/json');
+      await readBack('PUT JSON multi body fields');
+    }
+    // Probe 6: OData style /Articles({id})/Description (PASCAL)
+    {
+      const body = JSON.stringify({ Text: probeBody });
+      await tryRequest('PUT OData paren path', 'PUT', `/api/Knowledge/KnowledgeArticles(${articleId})/Description`, body, 'application/json');
+      await readBack('PUT OData paren path');
+    }
+
+    res.json({
+      kbId, fillProbeV3: articleId,
+      results,
+      note: '看 results 哪个 READBACK 段显示 found=[{field:X,...}] —— 那个 X 就是 ITHub 写入的 body 字段。',
+    });
+    return;
+  }
+
   // fillProbeV2: PUT/POST 各种 sub-resource 路径找 body 写入端点。
   // 之前的 fillProbe 测了 11 个 body 字段名（DescriptionText/Body/Content
   // /Description/Html/...）都 200 但 readBack 都没内容。说明 PUT
