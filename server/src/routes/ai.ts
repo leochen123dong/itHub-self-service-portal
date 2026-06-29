@@ -424,13 +424,15 @@ ${content}`;
 
 // POST /api/ai/kb/publish — write a KB article to ITHub.
 //
-// Verified working combination (from _debug probe, commit beafe7d):
+// Verified working combination (from _debug probe, attempt 14 of commit
+// 6f126d3 — the only one that actually wrote a row):
 //   POST /api/Knowledge/KnowledgeBases/{kbId}/KnowledgeArticles
-//   Body: { Identifier, Summary, DescriptionText, KnowledgeBaseId,
-//           CustomerId, CustomerTag, Active }
-//   ITHub returns 200 with body = null (no article id in response).
-//   To get the new articleId we GET the list right after and match by
-//   Identifier.
+//   Body: full 16-field shape copied from K100003 (existingSample),
+//   with `CustomerTag` set to the SESSION's customer tag (config.ithub
+//   .customerTag) — NOT the existingSample's "demo" tag. ITHub silently
+//   rolls back cross-customer writes (returns 200 but doesn't write).
+//   ITHub returns 200 with body=null on success; we GET the list right
+//   after and match by Identifier to recover the new articleId.
 //
 // Body: { title, summary, body, knowledgeBaseId? }
 aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => {
@@ -472,9 +474,13 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
   // a different millisecond.
   const identifier = 'K' + Date.now();
 
-  // 3. POST. The probe showed ITHub returns 200 with body=null — meaning
-  // the write succeeded but ITHub didn't echo the new id. We then GET
-  // the list and match our Identifier to find the new KnowledgeArticleId.
+  // 3. POST the full K100003 shape. CustomerTag MUST be the session's
+  // customer tag (config.ithub.customerTag), not the existingSample's
+  // tag — ITHub silently rolls back writes where CustomerTag doesn't
+  // match the session customer. CustomerId=3 is the KB customer ID we
+  // discovered via existingSample; the read-only expanded fields
+  // (ParentKnowledgeCategoryId, KnowledgeCategoryName, etc.) are sent
+  // because ITHub's PUT handler validates them.
   try {
     await ithubFetch<any>(
       `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
@@ -483,18 +489,20 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
         accessToken,
         body: {
           Identifier: identifier,
-          // ITHub's KB model has no Name/Title field — Summary is the
-          // human-readable one-liner that shows up as the article title
-          // in admin lists.
+          CustomerId: 3,
+          CustomerTag: config.ithub.customerTag,
+          KnowledgeBaseId: kbId,
+          ParentKnowledgeCategoryId: 4,
+          KnowledgeCategoryId: 5,
+          KnowledgeCategoryName: 'Hardware',
+          KnowledgeCategoryDescription: '',
           Summary: String(title).slice(0, 200),
           DescriptionText: String(body),
-          KnowledgeBaseId: kbId,
-          // CustomerId/CustomerTag are NOT NULL on KB_KNOWLEDGEARTICLE.
-          // CustomerId=3 + CustomerTag="demo" came from existingSample.
-          CustomerId: 3,
-          CustomerTag: 'demo',
-          Active: true,
           KnowledgeArticleStatus: 1,
+          Active: true,
+          AccessFlags: 2147483647,
+          KnowledgeArticleAccessFlags: 2147483647,
+          KnowledgeArticleServiceDeskAccessFlags: 2147483647,
         },
       },
     );
