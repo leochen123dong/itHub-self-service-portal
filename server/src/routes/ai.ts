@@ -726,6 +726,84 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     return;
   }
 
+  // fillProbe: try multiple PUT field-name candidates for the body
+  // field. Each attempt updates the article's Summary to a unique
+  // marker so we can see which PUT actually wrote. Then we read back
+  // the article and inspect the field that's most likely the body.
+  // Body: { fillProbe: <articleId> }
+  if (typeof req.body?.fillProbe === 'number') {
+    const articleId = req.body.fillProbe as number;
+    const candidates = [
+      'DescriptionText',
+      'Body',
+      'Content',
+      'Description',
+      'Html',
+      'Text',
+      'DescriptionHtml',
+      'BodyHtml',
+      'BodyText',
+      'ArticleBody',
+      'DescriptionTextHtml',
+    ];
+    const results: any[] = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const fieldName = candidates[i];
+      const probeBody = `__PROBE_FIELD_${fieldName}__<p>这是 ${fieldName} 字段测试 body</p>`;
+      const probeSummary = `__PROBE_${fieldName}__ ${new Date().toISOString()}`;
+      try {
+        const data = await ithubFetch<any>(
+          `/api/Knowledge/KnowledgeArticles/${articleId}`,
+          {
+            method: 'PUT',
+            accessToken,
+            body: {
+              Identifier: `K${articleId}`,
+              CustomerId: 3, CustomerTag: config.ithub.customerTag,
+              KnowledgeBaseId: kbId, ParentKnowledgeCategoryId: 4,
+              KnowledgeCategoryId: 5, KnowledgeCategoryName: 'Hardware',
+              KnowledgeCategoryDescription: '',
+              Summary: probeSummary,
+              [fieldName]: probeBody,
+              KnowledgeArticleStatus: 1, Active: true,
+              AccessFlags: 2147483647,
+              KnowledgeArticleAccessFlags: 2147483647,
+              KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+            },
+          },
+        );
+        results.push({ fieldName, status: 200, response: data, probeBody, probeSummary });
+      } catch (e) {
+        const err = e as any;
+        results.push({ fieldName, status: err?.status ?? 500, error: err?.upstreamMessage ?? err?.message });
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    // Now read back the article to see what was actually saved.
+    let readBack: any = null;
+    try {
+      readBack = (await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeArticles/${articleId}`,
+        { accessToken },
+      )) as Record<string, unknown>;
+    } catch (e) {
+      readBack = { _readError: (e as Error)?.message };
+    }
+    res.json({
+      kbId, fillProbe: articleId,
+      attempts: results,
+      readBack,
+      // Highlight field names that have non-empty content in the read-back
+      bodyFieldCandidates: readBack && typeof readBack === 'object'
+        ? Object.entries(readBack)
+            .filter(([k, v]) => typeof v === 'string' && (v as string).includes('__PROBE_FIELD_'))
+            .map(([k, v]) => ({ field: k, value: (v as string).slice(0, 100) }))
+        : [],
+      note: '看 readBack 哪个字段名带 __PROBE_FIELD_ 前缀，那个就是 ITHub 实际写入的 body 字段。',
+    });
+    return;
+  }
+
   // Optional: fill content of an EXISTING article that was created
   // without content (e.g. K100091, K100101 from earlier 2-step runs
   // where step 2 GET timed out and we never reached step 3 PUT).
