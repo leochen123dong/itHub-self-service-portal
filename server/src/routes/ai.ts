@@ -16,7 +16,7 @@ import {
 } from '../ai/chatStore.js';
 import { getChatRatings, getStats, rateMessage, type Rating } from '../ai/ratingStore.js';
 import { getKbUsageStats, recordKbUsage } from '../ai/kbUsageStore.js';
-import { bumpVersion, getVersion } from '../ai/kbVersionStore.js';
+import { bumpVersion } from '../ai/kbVersionStore.js';
 
 interface ChatMessage {
   Role: 'User' | 'Assistant' | string;
@@ -606,7 +606,27 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
         },
       },
     );
-    const version = bumpVersion(articleId);
+    // ITHub has a 3-5+s read-replica lag after writes; re-read the
+    // article to capture the new ModifiedUtc so the version counter
+    // knows the post-PUT timestamp. Otherwise the next read will see a
+    // "new" ModifiedUtc and bump the counter a second time (making one
+    // publish look like v2 instead of v1).
+    await new Promise((r) => setTimeout(r, 2500));
+    let postModifiedUtc: string | undefined;
+    for (let attempt = 0; attempt < 3 && !postModifiedUtc; attempt++) {
+      try {
+        const reread = await ithubFetch<any>(
+          `/api/Knowledge/KnowledgeArticles/${articleId}`,
+          { accessToken },
+        );
+        postModifiedUtc = reread?.ModifiedUtc;
+        if (postModifiedUtc) break;
+      } catch {
+        /* retry */
+      }
+      if (!postModifiedUtc && attempt < 2) await new Promise((r) => setTimeout(r, 2000));
+    }
+    const version = bumpVersion(articleId, postModifiedUtc);
     res.json({ articleId, published: true, identifier, version });
   } catch (e) {
     // Draft is created; the PUT just failed to fill content. Surface
@@ -818,15 +838,15 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       return;
     }
 
-    const version = bumpVersion(articleId);
-
-    // Read back to confirm.
+    // Read back to confirm and capture the new ModifiedUtc so the
+    // version counter doesn't double-bump on the next read.
     await new Promise((r) => setTimeout(r, 2000));
     let after: { summary: unknown; descriptionLen: number | null; descriptionPreview: string | null } = {
       summary: null,
       descriptionLen: null,
       descriptionPreview: null,
     };
+    let postModifiedUtc: string | undefined;
     try {
       const r = (await ithubFetch<any>(
         `/api/Knowledge/KnowledgeArticles/${articleId}`,
@@ -841,9 +861,12 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
             ? (r.Description as string).slice(0, 200)
             : null,
       };
+      postModifiedUtc = typeof r.ModifiedUtc === 'string' ? (r.ModifiedUtc as string) : undefined;
     } catch {
       /* ignore */
     }
+
+    const version = bumpVersion(articleId, postModifiedUtc);
 
     res.json({
       ok: (after.descriptionLen ?? 0) > 0,

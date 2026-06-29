@@ -10,7 +10,7 @@ import { decodeHtmlEntities } from '../utils/text';
 // content-hash 跟着变。这样 GH Pages 部署后用户的浏览器一定拿新
 // bundle（而不是吃上一版的缓存）。在 console 输出一行，方便确认
 // 浏览器实际加载的是哪个版本。
-const BUILD_STAMP = '2026-06-30-refresh-v4';
+const BUILD_STAMP = '2026-06-30-refresh-v5';
 if (typeof console !== 'undefined') {
   console.info('[ITHub Portal] build:', BUILD_STAMP);
 }

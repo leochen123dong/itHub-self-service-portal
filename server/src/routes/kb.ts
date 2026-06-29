@@ -3,7 +3,7 @@ import { ithubFetch } from '../http/ithubClient.js';
 import { ITHubError } from '../http/errors.js';
 import { config } from '../config.js';
 import { resolveKbId } from '../ai/kbContext.js';
-import { getVersion } from '../ai/kbVersionStore.js';
+import { noteArticleSeen } from '../ai/kbVersionStore.js';
 import { requireSession } from '../session/middleware.js';
 
 export const kbRouter = Router();
@@ -39,12 +39,18 @@ kbRouter.get('/articles', requireSession, async (req, res): Promise<void> => {
       { accessToken: req.session!.accessToken },
     );
     // Attach the local version counter to each article so the list view
-    // can show "v3" alongside the title without a second round-trip.
+    // can show "v3" alongside the title without a second round-trip. Also
+    // observe ModifiedUtc so admin-side edits (status / body / etc.)
+    // bump the counter too — list endpoint is a cheap place to detect
+    // changes since we GET the whole article anyway.
     const withVersions = Array.isArray(data)
-      ? data.map((a) => ({
-          ...a,
-          Version: getVersion(Number(a?.KnowledgeArticleId)),
-        }))
+      ? data.map((a) => {
+          const id = Number(a?.KnowledgeArticleId);
+          return {
+            ...a,
+            Version: noteArticleSeen(id, a?.ModifiedUtc),
+          };
+        })
       : data;
     res.json(withVersions);
   } catch (e) {
@@ -59,10 +65,12 @@ kbRouter.get('/articles/:id', requireSession, async (req, res): Promise<void> =>
       `/api/Knowledge/KnowledgeArticles/${req.params.id}`,
       { accessToken: req.session!.accessToken },
     );
-    // Attach local version counter. 0 = we've never seen a publish for
-    // this article (only fetched/read). Articles that were published or
-    // repaired via our /kb/publish / kbRepair will have Version >= 1.
-    res.json({ ...data, Version: getVersion(Number(req.params.id)) });
+    // Observe ModifiedUtc and bump if it changed since the last read
+    // (this catches admin-side edits too, not just our own publishes).
+    res.json({
+      ...data,
+      Version: noteArticleSeen(Number(req.params.id), data?.ModifiedUtc),
+    });
   } catch (e) {
     const { status, body } = err(e, '获取文章失败');
     res.status(status).json(body);
