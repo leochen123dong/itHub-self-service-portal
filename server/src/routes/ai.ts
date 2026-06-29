@@ -424,17 +424,20 @@ ${content}`;
 
 // POST /api/ai/kb/publish — write a KB article to ITHub.
 //
-// 2-step flow (verified by _debug probe in commits 6f126d3 + bb8af69):
+// 2-step flow (verified by _debug probe in commits 6f126d3 + bb8af69 +
+// fc9f742 + 2eaacdb):
 //   1. POST creates a draft with metadata (Identifier, CustomerId/Tag,
 //      KnowledgeBaseId, ParentKnowledgeCategoryId, KnowledgeCategoryId).
 //      ITHub accepts it with 200 + null body, but **silently drops the
 //      content fields** (Summary, DescriptionText, Active, Status) —
 //      the resulting row has no title, no body, and Status=Draft.
 //   2. GET the list, match by Identifier → articleId.
-//   3. PUT the article at /KnowledgeBases/{kbId}/KnowledgeArticles/{id}
-//      with the content fields (Summary, DescriptionText, Active=1,
-//      KnowledgeArticleStatus=1). ITHub's PUT handler writes content
-//      correctly.
+//   3. PUT the article at the **top-level** path
+//      `/api/Knowledge/KnowledgeArticles/{articleId}` (NOT the nested
+//      `/KnowledgeBases/{kbId}/KnowledgeArticles/{id}` — that returns
+//      404, and PATCH is 405). ITHub's top-level PUT handler writes
+//      Summary, DescriptionText, Status, and Active correctly. Body
+//      comes back as the literal `true` on success.
 //
 // `CustomerTag` must be the SESSION's customer tag (config.ithub
 // .customerTag) — not the existingSample's "demo" tag. Mismatched
@@ -525,7 +528,7 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
   }
 
   // Step 2: find the new articleId by Identifier. ITHub's read replica
-  // lags the write by ~400ms; retry a couple times before giving up.
+  // lags the write by ~500ms; retry a few times before giving up.
   let articleId = 0;
   for (let i = 0; i < 5 && articleId === 0; i++) {
     await new Promise((r) => setTimeout(r, 500));
@@ -552,12 +555,14 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
     return;
   }
 
-  // Step 3: PUT the content. ITHub's PUT to the article's nested URL
-  // is what actually writes Summary, DescriptionText, Status, and
-  // Active. This is the step that fills in the visible body.
+  // Step 3: PUT the content. ITHub accepts PUT only on the TOP-LEVEL
+  // path `/api/Knowledge/KnowledgeArticles/{articleId}` — the nested
+  // `/KnowledgeBases/{kbId}/KnowledgeArticles/{id}` returns 404, and
+  // PATCH on either returns 405. ITHub's body comes back as `true`
+  // on success.
   try {
     await ithubFetch<any>(
-      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles/${articleId}`,
+      `/api/Knowledge/KnowledgeArticles/${articleId}`,
       {
         method: 'PUT',
         accessToken,
@@ -590,7 +595,7 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
       error: {
         code: 'KB_PUBLISH_PARTIAL',
         message_zh: 'KB 草稿已创建 (#' + articleId + ') 但填写内容失败：' + (err.upstreamMessage ?? err.message ?? 'ITHub 拒绝'),
-        upstreamErrors: [{ endpoint: 'PUT nested', status: err.status ?? 500, message: err.upstreamMessage ?? err.message ?? '' }],
+        upstreamErrors: [{ endpoint: 'PUT top-level', status: err.status ?? 500, message: err.upstreamMessage ?? err.message ?? '' }],
         articleId,
         identifier,
         draft,
