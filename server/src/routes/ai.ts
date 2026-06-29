@@ -943,6 +943,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     note: '每个 attempt 都会真在 ITHub 创建一行 __PROBE__ 数据。请测完后到 ITHub admin Knowledge 后台手动删除。',
     existingSample,
     existingKeys: existingSample ? Object.keys(existingSample) : [],
+    existingSampleFull: existingSample ?? null,
     // The ground truth: which probe Identifiers actually landed in the KB
     // list after all attempts ran. ITHub's 200 response is unreliable —
     // only this map tells us which shape actually writes. Keyed by
