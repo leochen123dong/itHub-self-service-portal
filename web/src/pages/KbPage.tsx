@@ -13,6 +13,27 @@ function formatDate(iso?: string): string {
   return d.toLocaleString('zh-CN', { hour12: false });
 }
 
+// ITHub sometimes returns rich sub-context / user objects instead of a
+// plain string for fields like KnowledgeCategoryName / CreatedBy /
+// ModifiedBy (varies per tenant / per article). React error #31
+// ("Objects are not valid as a React child") fires when we render those
+// directly. Coerce defensively.
+function safeStr(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  // Object: pull .Name if present (matches ITHub's user / category shape),
+  // otherwise JSON. Avoid React error #31 by always returning a string.
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.Name === 'string') return o.Name;
+    if (typeof o.UserName === 'string') return o.UserName;
+    if (typeof o.DisplayName === 'string') return o.DisplayName;
+    return '';
+  }
+  return String(v);
+}
+
 // ITHub status codes → human-readable Chinese label + CSS modifier.
 // 0=Draft, 1=Open/Pending (we use this for created articles), 2=Published.
 // Anything else falls through to "未知".
@@ -26,21 +47,20 @@ function KbVersionInfo({ article }: { article: KnowledgeArticle }) {
   const status = typeof article.KnowledgeArticleStatus === 'number'
     ? STATUS_LABELS[article.KnowledgeArticleStatus]
     : null;
+  const createdBy = safeStr(article.CreatedBy);
+  const modifiedBy = safeStr(article.ModifiedBy);
+  const category = safeStr(article.KnowledgeCategoryName);
   return (
     <div className="kb-version-info">
       <div className="kb-version-cell">
         <span className="kb-version-label">创建时间</span>
-        <span className="kb-version-value">{formatDate(article.CreatedUtc) || '—'}</span>
-        {article.CreatedBy && (
-          <span className="kb-version-author">by {article.CreatedBy}</span>
-        )}
+        <span className="kb-version-value">{formatDate(safeStr(article.CreatedUtc)) || '—'}</span>
+        {createdBy && <span className="kb-version-author">by {createdBy}</span>}
       </div>
       <div className="kb-version-cell">
         <span className="kb-version-label">最后更新</span>
-        <span className="kb-version-value">{formatDate(article.ModifiedUtc) || '—'}</span>
-        {article.ModifiedBy && (
-          <span className="kb-version-author">by {article.ModifiedBy}</span>
-        )}
+        <span className="kb-version-value">{formatDate(safeStr(article.ModifiedUtc)) || '—'}</span>
+        {modifiedBy && <span className="kb-version-author">by {modifiedBy}</span>}
       </div>
       {status && (
         <div className="kb-version-cell">
@@ -48,10 +68,10 @@ function KbVersionInfo({ article }: { article: KnowledgeArticle }) {
           <span className={`kb-version-status ${status.cls}`}>{status.label}</span>
         </div>
       )}
-      {article.KnowledgeCategoryName && (
+      {category && (
         <div className="kb-version-cell">
           <span className="kb-version-label">分类</span>
-          <span className="kb-version-value">{article.KnowledgeCategoryName}</span>
+          <span className="kb-version-value">{category}</span>
         </div>
       )}
     </div>
@@ -158,10 +178,10 @@ export function KbPage() {
               onClick={() => openKbArticle(a.KnowledgeArticleId)}
             >
               <h4 className="kb-result-title">
-                {a.Title || a.Name || a.Summary || `文章 #${a.KnowledgeArticleId}`}
+                {safeStr(a.Title) || safeStr(a.Name) || safeStr(a.Summary) || `文章 #${a.KnowledgeArticleId}`}
               </h4>
               <p className="kb-result-snippet">
-                {(a.Summary || a.Description || '').slice(0, 200) || '（无摘要）'}
+                {safeStr(a.Summary || a.Description).slice(0, 200) || '（无摘要）'}
               </p>
             </div>
           ))}
@@ -170,9 +190,9 @@ export function KbPage() {
 
       <Drawer
         title={
-          openArticle?.Title ||
-          openArticle?.Name ||
-          openArticle?.Summary ||
+          safeStr(openArticle?.Title) ||
+          safeStr(openArticle?.Name) ||
+          safeStr(openArticle?.Summary) ||
           (openArticle ? `文章 #${openArticle.KnowledgeArticleId}` : '文章')
         }
         open={!!openArticle}
@@ -181,8 +201,9 @@ export function KbPage() {
         {openArticle && <KbVersionInfo article={openArticle} />}
         <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, marginTop: 16 }}>
           {(() => {
-            const raw =
-              openArticle?.Content || openArticle?.Body || openArticle?.Description || '';
+            const raw = safeStr(
+              openArticle?.Content || openArticle?.Body || openArticle?.Description,
+            );
             if (!raw) return '（正文为空）';
             return decodeHtmlEntities(raw);
           })()}
