@@ -10,7 +10,7 @@ import { decodeHtmlEntities } from '../utils/text';
 // content-hash 跟着变。这样 GH Pages 部署后用户的浏览器一定拿新
 // bundle（而不是吃上一版的缓存）。在 console 输出一行，方便确认
 // 浏览器实际加载的是哪个版本。
-const BUILD_STAMP = '2026-06-30-refresh-v3';
+const BUILD_STAMP = '2026-06-30-refresh-v4';
 if (typeof console !== 'undefined') {
   console.info('[ITHub Portal] build:', BUILD_STAMP);
 }
@@ -44,12 +44,13 @@ function safeStr(v: unknown): string {
 }
 
 // ITHub status codes → human-readable Chinese label + CSS modifier.
-// 0=Draft, 1=Open/Pending (we use this for created articles), 2=Published.
-// Anything else falls through to "未知".
+// 实际 ITHub KB 状态枚举：
+//   0 = Draft (草稿)
+//   1 = Published (已发布)
+// 其它值走"未知"。
 const STATUS_LABELS: Record<number, { label: string; cls: string }> = {
   0: { label: '草稿', cls: 'draft' },
-  1: { label: '待发布', cls: 'pending' },
-  2: { label: '已发布', cls: 'published' },
+  1: { label: '已发布', cls: 'published' },
 };
 
 function KbVersionInfo({ article }: { article: KnowledgeArticle }) {
