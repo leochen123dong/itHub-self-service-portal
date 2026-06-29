@@ -721,6 +721,43 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     return;
   }
 
+  // Optional list-only mode: GET the first N articles and return all of
+  // them. Used to verify whether a freshly POSTed article appears in
+  // the list (we suspect ITHub may filter out Active=false drafts from
+  // the default list response).
+  if (req.body?.listProbe === true) {
+    const top = typeof req.body?.top === 'number' ? req.body.top : 200;
+    try {
+      const list = (await ithubFetch<any[]>(
+        `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+        { accessToken, query: { $top: top } },
+      )) as any[];
+      res.json({
+        kbId,
+        listProbe: true,
+        count: Array.isArray(list) ? list.length : 0,
+        // Just the fields the user needs to correlate with their POST:
+        // Identifier (what we send), KnowledgeArticleId, Summary, Active,
+        // KnowledgeArticleStatus, CustomerTag.
+        articles: Array.isArray(list)
+          ? list.map((a) => ({
+              KnowledgeArticleId: a.KnowledgeArticleId,
+              Identifier: a.Identifier,
+              Summary: a.Summary,
+              Active: a.Active,
+              KnowledgeArticleStatus: a.KnowledgeArticleStatus,
+              CustomerTag: a.CustomerTag,
+              CreatedUtc: a.CreatedUtc,
+            }))
+          : [],
+      });
+    } catch (e) {
+      const err = e as ITHubError;
+      res.status(502).json({ error: { code: 'LIST_FAILED', message_zh: err.upstreamMessage ?? err.message ?? 'list failed' } });
+    }
+    return;
+  }
+
   // Step 2: try several POST shapes. Use a __PROBE__ prefix so the user
   // can find and delete these in ITHub admin. Each attempt is independent
   // — if one succeeds, we still record the others' errors for completeness
