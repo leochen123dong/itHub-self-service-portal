@@ -646,11 +646,7 @@ ${turns}`;
 //   dryRun=true: only GET-list the existing articles and return their
 //                field names so we can guess the right body without writing.
 //   dryRun=false (default): run all POST attempts.
-aiRouter.post('/_debug/ithub-kb-publish', requireSession, async (req, res): Promise<void> => {
-  if (!config.admin.identities.includes(req.session!.userName)) {
-    res.status(403).json({ error: { code: 'NOT_ADMIN', message_zh: '仅管理员可访问' } });
-    return;
-  }
+aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (req, res): Promise<void> => {
   if (!config.ithub.apiKey) {
     res.status(500).json({ error: { code: 'NO_API_KEY', message_zh: '服务端未配置 ITHUB_API_KEY' } });
     return;

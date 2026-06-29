@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ithubFetch } from '../http/ithubClient.js';
 import { ITHubError } from '../http/errors.js';
 import { requireSession } from '../session/middleware.js';
+import { requireAdmin } from '../middleware/admin.js';
 import { config } from '../config.js';
 
 export const ticketsRouter = Router();
@@ -46,11 +47,7 @@ ticketsRouter.get('/', requireSession, async (req, res): Promise<void> => {
 // to probe for presence / color fields. Returns the raw ITHub body so we
 // can see exactly what the upstream returns. Not for production use — keep
 // behind requireAdmin.
-ticketsRouter.get('/_debug/ithub-ticket/:id', requireSession, async (req, res): Promise<void> => {
-  if (!config.admin.identities.includes(req.session!.userName)) {
-    res.status(403).json({ error: { code: 'NOT_ADMIN', message_zh: '仅管理员可访问' } });
-    return;
-  }
+ticketsRouter.get('/_debug/ithub-ticket/:id', requireSession, requireAdmin, async (req, res): Promise<void> => {
   if (!config.ithub.apiKey) {
     res.status(500).json({ error: { code: 'NO_API_KEY', message_zh: '服务端未配置 ITHUB_API_KEY' } });
     return;
