@@ -665,9 +665,10 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
 
   type Attempt = {
     label: string;
-    method: 'POST' | 'PUT';
+    method: 'POST' | 'PUT' | 'PATCH';
     path: string;
     body: Record<string, unknown>;
+    extraHeaders?: Record<string, string>;
     status: number;
     ok: boolean;
     bodyExcerpt: string;
@@ -868,6 +869,136 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'j',
   });
 
+  // 12. Full copy of K100003 (existingSample), all 16 fields minus ID +
+  // time-stamps, Identifier replaced. This is the highest-probability
+  // attempt: if ITHub's write check is "shape must match an existing
+  // article exactly", this passes.
+  attempts.push({
+    label: 'FULL copy of K100003 shape (every field incl. Parent category)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'k',
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      KnowledgeBaseId: kbId,
+      ParentKnowledgeCategoryId: 4,
+      KnowledgeCategoryId: 5,
+      KnowledgeCategoryName: 'Hardware',
+      KnowledgeCategoryDescription: '',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeArticleStatus: 1,
+      Active: true,
+      AccessFlags: 2147483647,
+      KnowledgeArticleAccessFlags: 2147483647,
+      KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'k',
+  });
+
+  // 13. Same as 12 but KnowledgeArticleStatus=0 (Draft). The 200-but-no-write
+  // could be ITHub's "you're creating as published but the workflow requires
+  // draft first" silent rollback.
+  attempts.push({
+    label: 'FULL copy + KnowledgeArticleStatus=0 (Draft)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'l',
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      KnowledgeBaseId: kbId,
+      ParentKnowledgeCategoryId: 4,
+      KnowledgeCategoryId: 5,
+      KnowledgeCategoryName: 'Hardware',
+      KnowledgeCategoryDescription: '',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeArticleStatus: 0,
+      Active: true,
+      AccessFlags: 2147483647,
+      KnowledgeArticleAccessFlags: 2147483647,
+      KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'l',
+  });
+
+  // 14. Same as 12 but CustomerTag='ciscoinnovation1' (current session's
+  // login customer). The KB existingSample is on customer 'demo' but maybe
+  // the write is being rejected because our session's customer tag doesn't
+  // match — silent cross-customer-write block.
+  attempts.push({
+    label: 'FULL copy + CustomerTag=ciscoinnovation1 (session customer)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'm',
+      CustomerId: 3,
+      CustomerTag: 'ciscoinnovation1',
+      KnowledgeBaseId: kbId,
+      ParentKnowledgeCategoryId: 4,
+      KnowledgeCategoryId: 5,
+      KnowledgeCategoryName: 'Hardware',
+      KnowledgeCategoryDescription: '',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeArticleStatus: 1,
+      Active: true,
+      AccessFlags: 2147483647,
+      KnowledgeArticleAccessFlags: 2147483647,
+      KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'm',
+  });
+
+  // 15. PATCH verb instead of POST. OData sometimes uses PATCH for upsert.
+  attempts.push({
+    label: 'PATCH nested (OData upsert)',
+    method: 'PATCH',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'n',
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      KnowledgeBaseId: kbId,
+      ParentKnowledgeCategoryId: 4,
+      KnowledgeCategoryId: 5,
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeArticleStatus: 1,
+      Active: true,
+      AccessFlags: 2147483647,
+      KnowledgeArticleAccessFlags: 2147483647,
+      KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'n',
+  });
+
+  // 16. POST with If-Match: * header (OData create-or-update convention).
+  attempts.push({
+    label: 'POST nested with If-Match: * header',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    extraHeaders: { 'If-Match': '*' },
+    body: {
+      Identifier: probeIdentifier + 'o',
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      KnowledgeBaseId: kbId,
+      ParentKnowledgeCategoryId: 4,
+      KnowledgeCategoryId: 5,
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeArticleStatus: 1,
+      Active: true,
+      AccessFlags: 2147483647,
+      KnowledgeArticleAccessFlags: 2147483647,
+      KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+    },
+    status: 0, ok: false, bodyExcerpt: '', identifier: probeIdentifier + 'o',
+  });
+
   // Execute each attempt serially. ITHub rate-limits, so 1s spacing is
   // polite. We don't bail on success — we want to see all results.
   for (const a of attempts) {
@@ -876,6 +1007,7 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
         method: a.method,
         accessToken,
         body: a.body,
+        ...(a.extraHeaders ? { headers: a.extraHeaders } : {}),
       })) as Record<string, unknown> | null | undefined;
       a.status = 200;
       // The 500 we saw earlier said "Cannot read 'KnowledgeArticleId' of

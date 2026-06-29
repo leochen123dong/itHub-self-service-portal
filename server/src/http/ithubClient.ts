@@ -16,6 +16,10 @@ interface FetchOptions {
   query?: Record<string, string | number | undefined | null>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  // Extra request headers to merge on top of the defaults (Accept,
+  // AccessToken, ApiKey, Content-Type). Use for OData-specific headers
+  // like If-Match: *.
+  headers?: Record<string, string>;
 }
 
 function buildUrl(path: string, query?: FetchOptions['query']): string {
@@ -33,12 +37,15 @@ export async function ithubFetch<T = unknown>(
   path: string,
   options: FetchOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, accessToken, apiKey, query, timeoutMs = TIMEOUT_MS, signal } = options;
+  const { method = 'GET', body, accessToken, apiKey, query, timeoutMs = TIMEOUT_MS, signal, headers: extraHeaders } = options;
   const url = buildUrl(path, query);
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (accessToken) headers['AccessToken'] = accessToken;
   if (apiKey) headers['ApiKey'] = apiKey;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (extraHeaders) {
+    for (const [k, v] of Object.entries(extraHeaders)) headers[k] = v;
+  }
 
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
