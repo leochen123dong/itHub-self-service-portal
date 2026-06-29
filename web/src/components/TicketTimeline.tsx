@@ -1,4 +1,5 @@
 import type { TicketJournal } from '../types/api';
+import { stripHtml } from '../utils/text';
 
 interface Props {
   journals: TicketJournal[];
@@ -9,27 +10,6 @@ function formatDate(iso?: string) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleString('zh-CN', { hour12: false });
-}
-
-// ITHub returns journals with the body in `Html` (wrapped in <p>...</p>),
-// plus double-encoded entities (`&lt;` etc.). The old field map only read
-// `Content` and `UserName`, so the timeline rendered empty.
-function stripHtml(s: string): string {
-  return s
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    // ITHub sends Unicode as hex entities (e.g. &#x5B89;). Decode both forms.
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{2,}/g, '\n')
-    .trim();
 }
 
 function pickBody(j: TicketJournal): string {

@@ -4,6 +4,7 @@ import type { KnowledgeArticle } from '../types/api';
 import { ApiError } from '../api/client';
 import { Drawer } from '../components/Drawer';
 import { EmptyState } from '../components/EmptyState';
+import { decodeHtmlEntities } from '../utils/text';
 
 function formatDate(iso?: string): string {
   if (!iso) return '';
@@ -157,7 +158,7 @@ export function KbPage() {
               onClick={() => openKbArticle(a.KnowledgeArticleId)}
             >
               <h4 className="kb-result-title">
-                {a.Title || a.Name || `文章 #${a.KnowledgeArticleId}`}
+                {a.Title || a.Name || a.Summary || `文章 #${a.KnowledgeArticleId}`}
               </h4>
               <p className="kb-result-snippet">
                 {(a.Summary || a.Description || '').slice(0, 200) || '（无摘要）'}
@@ -168,14 +169,24 @@ export function KbPage() {
       )}
 
       <Drawer
-        title={openArticle?.Title || openArticle?.Name || '文章'}
+        title={
+          openArticle?.Title ||
+          openArticle?.Name ||
+          openArticle?.Summary ||
+          (openArticle ? `文章 #${openArticle.KnowledgeArticleId}` : '文章')
+        }
         open={!!openArticle}
         onClose={() => setOpenArticle(null)}
       >
-        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
-          {openArticle?.Content || openArticle?.Body || openArticle?.Description || '（正文为空）'}
-        </div>
         {openArticle && <KbVersionInfo article={openArticle} />}
+        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, marginTop: 16 }}>
+          {(() => {
+            const raw =
+              openArticle?.Content || openArticle?.Body || openArticle?.Description || '';
+            if (!raw) return '（正文为空）';
+            return decodeHtmlEntities(raw);
+          })()}
+        </div>
       </Drawer>
     </div>
   );
