@@ -6,6 +6,11 @@ import { Drawer } from '../components/Drawer';
 import { EmptyState } from '../components/EmptyState';
 import { decodeHtmlEntities } from '../utils/text';
 
+// 构建时间戳 —— 每次重新构建会刷新这个常量，让 Vite 输出的 bundle
+// content-hash 跟着变。这样 GH Pages 部署后用户的浏览器一定拿新
+// bundle（而不是吃上一版的缓存）。
+const BUILD_STAMP = '2026-06-30-refresh-v2';
+
 function formatDate(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
