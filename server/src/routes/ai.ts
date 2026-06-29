@@ -1142,22 +1142,13 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
   if (targetArticleId) {
     const putAttempts: Attempt[] = [];
     const htmlBody = `<p>${targetBody.replace(/\n/g, '<br>')}</p>`;
-    const mk = (label: string, body: Record<string, unknown>, extraHeaders?: Record<string, string>) => ({
-      label, method: 'PUT' as const,
-      path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles/${targetArticleId}`,
-      body, ...(extraHeaders ? { extraHeaders } : {}),
+    const mk = (label: string, path: string, body: Record<string, unknown>, method: 'PUT' | 'PATCH' | 'POST' = 'PUT', extraHeaders?: Record<string, string>) => ({
+      label, method,
+      path, body, ...(extraHeaders ? { extraHeaders } : {}),
       status: 0, ok: false, bodyExcerpt: '',
-      identifier: `PUT_${targetArticleId}_${label.slice(0, 20)}`,
+      identifier: `PUT_${targetArticleId}_${label.slice(0, 30).replace(/\W/g, '_')}`,
     });
-    putAttempts.push(mk('DescriptionText (plain)', { DescriptionText: targetBody }));
-    putAttempts.push(mk('DescriptionText (HTML)', { DescriptionText: htmlBody }));
-    putAttempts.push(mk('Body', { Body: targetBody }));
-    putAttempts.push(mk('Body (HTML)', { Body: htmlBody }));
-    putAttempts.push(mk('Content', { Content: targetBody }));
-    putAttempts.push(mk('Description', { Description: targetBody }));
-    putAttempts.push(mk('DescriptionHtml', { DescriptionHtml: htmlBody }));
-    putAttempts.push(mk('BodyHtml', { BodyHtml: htmlBody }));
-    putAttempts.push(mk('Full K100003 shape (PUT)', {
+    const fullBody = (extra: Record<string, unknown> = {}) => ({
       Identifier: `K100091_PUT_TEST`,
       CustomerId: 3, CustomerTag: config.ithub.customerTag,
       KnowledgeBaseId: kbId, ParentKnowledgeCategoryId: 4,
@@ -1169,7 +1160,24 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       AccessFlags: 2147483647,
       KnowledgeArticleAccessFlags: 2147483647,
       KnowledgeArticleServiceDeskAccessFlags: 2147483647,
-    }));
+      ...extra,
+    });
+    const nested = `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles/${targetArticleId}`;
+    const nestedParen = `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles(${targetArticleId})`;
+    const topLevel = `/api/Knowledge/KnowledgeArticles/${targetArticleId}`;
+    const topLevelParen = `/api/Knowledge/KnowledgeArticles(${targetArticleId})`;
+    // Field-name probes — these tell us what ITHub's PUT handler reads.
+    putAttempts.push(mk('nested id=PUT: DescriptionText', nested, { DescriptionText: targetBody }));
+    putAttempts.push(mk('nested id=PUT: DescriptionText HTML', nested, { DescriptionText: htmlBody }));
+    putAttempts.push(mk('nested id=PUT: Body', nested, { Body: targetBody }));
+    putAttempts.push(mk('nested id=PUT: Content', nested, { Content: targetBody }));
+    putAttempts.push(mk('nested id=PUT: Description', nested, { Description: targetBody }));
+    // Path-shape probes — the actual endpoint might be different.
+    putAttempts.push(mk('nested (id) PUT: full K100003', nestedParen, fullBody()));
+    putAttempts.push(mk('top-level id PUT: full K100003', topLevel, fullBody()));
+    putAttempts.push(mk('top-level (id) PUT: full K100003', topLevelParen, fullBody()));
+    putAttempts.push(mk('PATCH nested (id): full K100003', nestedParen, fullBody(), 'PATCH'));
+    putAttempts.push(mk('PATCH top-level: full K100003', topLevel, fullBody(), 'PATCH'));
     for (const a of putAttempts) {
       try {
         const data = (await ithubFetch<any>(a.path, {
