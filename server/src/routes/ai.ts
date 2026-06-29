@@ -504,8 +504,12 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
           KnowledgeCategoryDescription: '',
           // Content fields sent on POST — ITHub silently drops these, but
           // the PUT in step 3 re-sends them so it's the source of truth.
+          // NOTE: ITHub's actual body field is `Description` (verified by
+          // fillProbeV4 GET keys showing `["Summary","Description"]`).
+          // `DescriptionText` is silently ignored — that's why older
+          // articles (K100101-K100103) had empty Description.
           Summary: String(title).slice(0, 200),
-          DescriptionText: String(body),
+          Description: String(body),
           KnowledgeArticleStatus: 0,
           Active: true,
           AccessFlags: 2147483647,
@@ -581,7 +585,7 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
           KnowledgeCategoryName: 'Hardware',
           KnowledgeCategoryDescription: '',
           Summary: String(title).slice(0, 200),
-          DescriptionText: String(body),
+          Description: String(body),
           KnowledgeArticleStatus: 0,
           Active: true,
           AccessFlags: 2147483647,
@@ -1158,6 +1162,122 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
       results,
       note:
         '看 READBACK 段 descriptionType / descriptionPreview —— 哪个 probe 之后 Description 字段含 __PROBEV5_BODY__，就是它生效。',
+    });
+    return;
+  }
+
+  // kbRepair: fill an existing empty article by sending the same body
+  // /kb/publish sends in step 3. Use this to backfill articles that were
+  // created before the DescriptionText→Description field rename.
+  //
+  // Body: { articleId: number, summary?: string, body: string }
+  // Returns: { ok, before, after, excerpt }
+  if (typeof req.body?.kbRepair === 'object' && req.body.kbRepair !== null) {
+    const { articleId, body, summary } = req.body.kbRepair as {
+      articleId?: number;
+      summary?: string;
+      body?: string;
+    };
+    if (typeof articleId !== 'number' || typeof body !== 'string') {
+      res.status(400).json({
+        error: { code: 'INVALID', message_zh: 'kbRepair 需要 { articleId, body }' },
+      });
+      return;
+    }
+    const accessToken = req.session!.accessToken;
+
+    // GET current full record so PUT has every NOT NULL column.
+    let current: Record<string, unknown> = {};
+    try {
+      current = (await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeArticles/${articleId}`,
+        { accessToken },
+      )) as Record<string, unknown>;
+    } catch (e) {
+      const err = e as ITHubError;
+      res.status(err.status || 500).json({
+        error: {
+          code: err.code || 'KB_REPAIR_GET_FAILED',
+          message_zh: '读取文章失败：' + (err.upstreamMessage ?? err.message ?? ''),
+        },
+      });
+      return;
+    }
+
+    const before = {
+      summary: current.Summary,
+      descriptionLen:
+        typeof current.Description === 'string' ? (current.Description as string).length : null,
+      descriptionPreview:
+        typeof current.Description === 'string'
+          ? (current.Description as string).slice(0, 200)
+          : null,
+    };
+
+    // Use caller's summary if provided, else keep existing.
+    const finalSummary =
+      typeof summary === 'string' && summary.trim()
+        ? summary.slice(0, 200)
+        : (current.Summary as string);
+
+    try {
+      await ithubFetch<any>(`/api/Knowledge/KnowledgeArticles/${articleId}`, {
+        method: 'PUT',
+        accessToken,
+        body: {
+          ...current,
+          Summary: finalSummary,
+          Description: String(body),
+          KnowledgeArticleStatus: 0, // Draft
+        },
+      });
+    } catch (e) {
+      const err = e as ITHubError;
+      res.status(err.status || 500).json({
+        error: {
+          code: err.code || 'KB_REPAIR_PUT_FAILED',
+          message_zh: 'PUT 失败：' + (err.upstreamMessage ?? err.message ?? ''),
+          before,
+        },
+      });
+      return;
+    }
+
+    // Read back to confirm.
+    await new Promise((r) => setTimeout(r, 2000));
+    let after: { summary: unknown; descriptionLen: number | null; descriptionPreview: string | null } = {
+      summary: null,
+      descriptionLen: null,
+      descriptionPreview: null,
+    };
+    try {
+      const r = (await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeArticles/${articleId}`,
+        { accessToken },
+      )) as Record<string, unknown>;
+      after = {
+        summary: r.Summary,
+        descriptionLen:
+          typeof r.Description === 'string' ? (r.Description as string).length : null,
+        descriptionPreview:
+          typeof r.Description === 'string'
+            ? (r.Description as string).slice(0, 200)
+            : null,
+      };
+    } catch {
+      /* ignore */
+    }
+
+    res.json({
+      ok: (after.descriptionLen ?? 0) > 0,
+      articleId,
+      before,
+      after,
+      excerpt: after.descriptionPreview,
+      note:
+        (after.descriptionLen ?? 0) > 0
+          ? '✅ 写入成功。ITHub 副本有 2s 延迟，请到 admin 刷新查看。'
+          : '❌ 写入后 readBack 仍为空 —— Description 字段名可能仍不对，需要继续探测。',
     });
     return;
   }
