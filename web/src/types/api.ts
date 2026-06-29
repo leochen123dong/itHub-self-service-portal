@@ -91,6 +91,17 @@ export interface KnowledgeArticle {
   Body?: string;
   Summary?: string;
   KnowledgeCategoryId?: number;
+  // Version metadata — ITHub returns these on GET. All optional since
+  // list responses may omit them.
+  CreatedUtc?: string;
+  CreatedLocalTime?: string;
+  CreatedBy?: string;
+  ModifiedUtc?: string;
+  ModifiedLocalTime?: string;
+  ModifiedBy?: string;
+  KnowledgeArticleStatus?: number;
+  KnowledgeCategoryName?: string;
+  Identifier?: string;
 }
 
 export interface TicketTemplate {
