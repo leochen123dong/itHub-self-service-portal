@@ -422,11 +422,15 @@ ${content}`;
   }
 });
 
-// POST /api/ai/kb/publish — write a KB article to ITHub. Tries several
-// endpoint/field-name combinations because ITHub's KB write API isn't
-// publicly documented. On any success returns { articleId, published: true }.
-// On total failure returns 502 with { code: 'KB_PUBLISH_FAILED', upstreamErrors, draft }
-// so the modal can offer a "copy draft" escape hatch.
+// POST /api/ai/kb/publish — write a KB article to ITHub.
+//
+// Verified working combination (from _debug probe, commit beafe7d):
+//   POST /api/Knowledge/KnowledgeBases/{kbId}/KnowledgeArticles
+//   Body: { Identifier, Summary, DescriptionText, KnowledgeBaseId,
+//           CustomerId, CustomerTag, Active }
+//   ITHub returns 200 with body = null (no article id in response).
+//   To get the new articleId we GET the list right after and match by
+//   Identifier.
 //
 // Body: { title, summary, body, knowledgeBaseId? }
 aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => {
@@ -462,116 +466,77 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
     return;
   }
 
-  const errors: Array<{ endpoint: string; status: number; message: string }> = [];
+  // 2. Build a unique Identifier. ITHub's KB_Identifier column requires
+  // uniqueness; "K" + Date.now() gives us a one-off that's safe enough
+  // for the demo. If you hit a collision, re-run — Date.now() will be
+  // a different millisecond.
+  const identifier = 'K' + Date.now();
 
-  // Attempt 1: nested path, PascalCase fields (mirrors listAllArticles)
+  // 3. POST. The probe showed ITHub returns 200 with body=null — meaning
+  // the write succeeded but ITHub didn't echo the new id. We then GET
+  // the list and match our Identifier to find the new KnowledgeArticleId.
   try {
-    const data = (await ithubFetch<any>(
+    await ithubFetch<any>(
       `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
       {
         method: 'POST',
         accessToken,
         body: {
-          Name: String(title),
-          Summary: String(summary ?? ''),
+          Identifier: identifier,
+          // ITHub's KB model has no Name/Title field — Summary is the
+          // human-readable one-liner that shows up as the article title
+          // in admin lists.
+          Summary: String(title).slice(0, 200),
           DescriptionText: String(body),
           KnowledgeBaseId: kbId,
+          // CustomerId/CustomerTag are NOT NULL on KB_KNOWLEDGEARTICLE.
+          // CustomerId=3 + CustomerTag="demo" came from existingSample.
+          CustomerId: 3,
+          CustomerTag: 'demo',
           Active: true,
+          KnowledgeArticleStatus: 1,
         },
       },
-    )) as Record<string, unknown>;
-    const articleId = Number(data.KnowledgeArticleId ?? data.Id ?? data.ArticleId);
+    );
+
+    // 4. GET the list and find the row we just wrote by Identifier.
+    // Wait briefly first — ITHub's read replica can lag the write by
+    // a fraction of a second on free tenants.
+    await new Promise((r) => setTimeout(r, 400));
+    const list = (await ithubFetch<any[]>(
+      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+      { accessToken, query: { $top: 50 } },
+    )) as any[];
+    const ours = Array.isArray(list)
+      ? list.find((a) => a?.Identifier === identifier)
+      : null;
+    const articleId = Number(ours?.KnowledgeArticleId ?? 0);
     if (articleId) {
-      res.json({ articleId, published: true });
+      res.json({ articleId, published: true, identifier });
       return;
     }
-    errors.push({
-      endpoint: 'nested-KnowledgeArticles',
-      status: 200,
-      message: 'ITHub 返回 200 但无 KnowledgeArticleId：' + JSON.stringify(data).slice(0, 200),
+    // Write succeeded (200) but we couldn't find the row in the next 50.
+    // Treat as success anyway — the user can find it via the Identifier
+    // in the ITHub admin.
+    res.json({
+      articleId: 0,
+      published: true,
+      identifier,
+      note: 'ITHub 接受 POST 但 GET 列表前 50 找不到对应 Identifier。请到 ITHub admin 按 Identifier 查找。',
     });
+    return;
   } catch (e) {
     const err = e as ITHubError;
-    errors.push({
-      endpoint: 'nested-KnowledgeArticles',
-      status: err.status ?? 500,
-      message: err.upstreamMessage ?? err.message,
-    });
-  }
-
-  // Attempt 2: top-level, PascalCase
-  try {
-    const data = (await ithubFetch<any>('/api/Knowledge/KnowledgeArticles', {
-      method: 'POST',
-      accessToken,
-      body: {
-        Name: String(title),
-        Summary: String(summary ?? ''),
-        DescriptionText: String(body),
-        KnowledgeBaseId: kbId,
-        Active: true,
+    res.status(502).json({
+      error: {
+        code: 'KB_PUBLISH_FAILED',
+        message_zh: 'KB 发布失败：' + (err.upstreamMessage ?? err.message ?? 'ITHub 拒绝'),
+        upstreamErrors: [{ endpoint: 'nested-KnowledgeArticles', status: err.status ?? 500, message: err.upstreamMessage ?? err.message ?? '' }],
+        draft,
       },
-    })) as Record<string, unknown>;
-    const articleId = Number(data.KnowledgeArticleId ?? data.Id ?? data.ArticleId);
-    if (articleId) {
-      res.json({ articleId, published: true });
-      return;
-    }
-    errors.push({
-      endpoint: 'top-KnowledgeArticles',
-      status: 200,
-      message: 'ITHub 返回 200 但无 KnowledgeArticleId',
     });
-  } catch (e) {
-    const err = e as ITHubError;
-    errors.push({
-      endpoint: 'top-KnowledgeArticles',
-      status: err.status ?? 500,
-      message: err.upstreamMessage ?? err.message,
-    });
+    return;
   }
-
-  // Attempt 3: top-level, snake-shape with Title/Content/Identifier
-  try {
-    const data = (await ithubFetch<any>('/api/Knowledge/KnowledgeArticles', {
-      method: 'POST',
-      accessToken,
-      body: {
-        Title: String(title),
-        Content: String(body),
-        Summary: String(summary ?? ''),
-        Identifier: 'K' + Date.now(),
-      },
-    })) as Record<string, unknown>;
-    const articleId = Number(data.KnowledgeArticleId ?? data.Id ?? data.ArticleId);
-    if (articleId) {
-      res.json({ articleId, published: true });
-      return;
-    }
-    errors.push({
-      endpoint: 'top-KnowledgeArticles-snake',
-      status: 200,
-      message: 'ITHub 返回 200 但无 KnowledgeArticleId',
-    });
-  } catch (e) {
-    const err = e as ITHubError;
-    errors.push({
-      endpoint: 'top-KnowledgeArticles-snake',
-      status: err.status ?? 500,
-      message: err.upstreamMessage ?? err.message,
-    });
-  }
-
-  // All attempts failed. Return 502 with the draft so the client can offer
-  // the user a copy-to-clipboard escape hatch.
-  res.status(502).json({
-    error: {
-      code: 'KB_PUBLISH_FAILED',
-      message_zh: 'KB 发布失败：所有尝试都被 ITHub 拒绝。可复制草稿到 ITHub 后台手动粘贴。',
-      upstreamErrors: errors,
-      draft,
-    },
-  });
 });
 
 // POST /api/chat/summarize — compress a chat transcript into a one-liner
