@@ -998,6 +998,170 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     return;
   }
 
+  // fillProbeV5: v4 GET revealed the actual body field is `Description`
+  // (not `DescriptionText` — the previous v1 fillProbe just sent strings
+  // and ITHub silently rolled back). v4 also had a bug — raw `fetch`
+  // was missing Content-Type header on PUT, hence the 415s. v5 fixes
+  // that and probes `Description` as string, as nested {Html,Text}
+  // object, and as sub-resource POST /Description.
+  if (typeof req.body?.fillProbeV5 === 'number') {
+    const articleId = req.body.fillProbeV5 as number;
+    const baseUrl = config.ithub.baseUrl;
+    const accessToken = req.session!.accessToken;
+    const probeSummary = `__PROBEV5_SUMMARY__ ${new Date().toISOString()}`;
+    const probeBody = `__PROBEV5_BODY__<p>这是 V5 body 测试 — ${Date.now()}</p>`;
+    const results: any[] = [];
+
+    const tryRequest = async (
+      label: string,
+      method: 'POST' | 'PUT' | 'PATCH',
+      path: string,
+      body: unknown,
+      contentType?: string,
+    ) => {
+      const url = new URL(path, baseUrl);
+      url.searchParams.set('customerTag', config.ithub.customerTag);
+      const headers: Record<string, string> = {
+        ...(accessToken ? { AccessToken: accessToken } : {}),
+        ...(config.ithub.apiKey ? { ApiKey: config.ithub.apiKey } : {}),
+      };
+      let wireBody: string | undefined;
+      if (body !== undefined && body !== null) {
+        if (typeof body === 'string') {
+          wireBody = body;
+          headers['Content-Type'] = contentType ?? 'text/plain';
+        } else {
+          wireBody = JSON.stringify(body);
+          headers['Content-Type'] = contentType ?? 'application/json';
+        }
+      }
+      try {
+        const r = await fetch(url.toString(), {
+          method,
+          headers,
+          body: wireBody,
+          signal: AbortSignal.timeout(15000),
+        });
+        const text = await r.text();
+        results.push({ label, method, path, status: r.status, excerpt: text.slice(0, 300) });
+      } catch (e) {
+        results.push({ label, method, path, status: 0, error: (e as Error)?.message });
+      }
+    };
+
+    const readBack = async (label: string) => {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const r = (await ithubFetch<any>(
+          `/api/Knowledge/KnowledgeArticles/${articleId}`,
+          { accessToken },
+        )) as Record<string, unknown>;
+        const found: { field: string; value: string }[] = [];
+        for (const [k, v] of Object.entries(r)) {
+          if (typeof v === 'string' && v.includes('__PROBEV5_BODY__')) {
+            found.push({ field: k, value: v.slice(0, 120) });
+          }
+        }
+        const descVal = r.Description;
+        results.push({
+          label: `READBACK after ${label}`,
+          status: 200,
+          summary: r.Summary as string,
+          descriptionType: typeof descVal,
+          descriptionLen:
+            typeof descVal === 'string'
+              ? descVal.length
+              : Array.isArray(descVal)
+                ? (descVal as unknown[]).length
+                : typeof descVal === 'object' && descVal !== null
+                  ? 'object-keys=' + Object.keys(descVal as object).join(',')
+                  : 'null',
+          descriptionPreview:
+            typeof descVal === 'string'
+              ? descVal.slice(0, 120)
+              : Array.isArray(descVal)
+                ? JSON.stringify(descVal).slice(0, 120)
+                : typeof descVal === 'object' && descVal !== null
+                  ? JSON.stringify(descVal).slice(0, 120)
+                  : null,
+          found,
+        });
+      } catch (e) {
+        results.push({ label: `READBACK after ${label}`, status: 0, error: (e as Error)?.message });
+      }
+    };
+
+    // Fetch the FULL current record (including the `Description` field value)
+    let fullRecord: Record<string, unknown> = {};
+    try {
+      fullRecord = (await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeArticles/${articleId}`,
+        { accessToken },
+      )) as Record<string, unknown>;
+      const descVal = fullRecord.Description;
+      results.push({
+        label: 'GET current article',
+        status: 200,
+        summary: fullRecord.Summary,
+        descriptionType: typeof descVal,
+        descriptionPreview:
+          typeof descVal === 'string'
+            ? descVal.slice(0, 150)
+            : JSON.stringify(descVal).slice(0, 150),
+        categoryId: fullRecord.KnowledgeCategoryId,
+      });
+    } catch (e) {
+      results.push({ label: 'GET current article', status: 0, error: (e as Error)?.message });
+    }
+
+    // Probe A: PUT full record + Description as STRING (most likely)
+    {
+      const body = { ...fullRecord, Summary: probeSummary, Description: probeBody };
+      await tryRequest('PUT full record + Description:string', 'PUT', `/api/Knowledge/KnowledgeArticles/${articleId}`, body);
+      await readBack('PUT full record + Description:string');
+    }
+
+    // Probe B: PUT full record + Description as nested {Html,Text} object
+    {
+      const body = {
+        ...fullRecord,
+        Summary: probeSummary,
+        Description: { Html: probeBody, Text: probeBody.replace(/<[^>]+>/g, '') },
+      };
+      await tryRequest('PUT full record + Description:{Html,Text}', 'PUT', `/api/Knowledge/KnowledgeArticles/${articleId}`, body);
+      await readBack('PUT full record + Description:{Html,Text}');
+    }
+
+    // Probe C: POST /Description with JSON body
+    {
+      const body = { Text: probeBody, Html: probeBody };
+      await tryRequest('POST /Description JSON {Text,Html}', 'POST', `/api/Knowledge/KnowledgeArticles/${articleId}/Description`, body);
+      await readBack('POST /Description JSON {Text,Html}');
+    }
+
+    // Probe D: POST /Description with raw HTML body
+    {
+      await tryRequest('POST /Description raw text/html', 'POST', `/api/Knowledge/KnowledgeArticles/${articleId}/Description`, probeBody, 'text/html');
+      await readBack('POST /Description raw text/html');
+    }
+
+    // Probe E: PATCH with Description:string (some OData services accept PATCH)
+    {
+      const body = { ...fullRecord, Summary: probeSummary, Description: probeBody };
+      await tryRequest('PATCH full record + Description:string', 'PATCH', `/api/Knowledge/KnowledgeArticles/${articleId}`, body);
+      await readBack('PATCH full record + Description:string');
+    }
+
+    res.json({
+      kbId,
+      fillProbeV5: articleId,
+      results,
+      note:
+        '看 READBACK 段 descriptionType / descriptionPreview —— 哪个 probe 之后 Description 字段含 __PROBEV5_BODY__，就是它生效。',
+    });
+    return;
+  }
+
   // fillProbeV2: PUT/POST 各种 sub-resource 路径找 body 写入端点。
   // 之前的 fillProbe 测了 11 个 body 字段名（DescriptionText/Body/Content
   // /Description/Html/...）都 200 但 readBack 都没内容。说明 PUT
