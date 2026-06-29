@@ -726,6 +726,112 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     return;
   }
 
+  // fillProbeV2: PUT/POST 各种 sub-resource 路径找 body 写入端点。
+  // 之前的 fillProbe 测了 11 个 body 字段名（DescriptionText/Body/Content
+  // /Description/Html/...）都 200 但 readBack 都没内容。说明 PUT
+  // handler 不写 body。试试 OData sub-resource 路径 + workflow 提交。
+  // Body: { fillProbeV2: <articleId> }
+  if (typeof req.body?.fillProbeV2 === 'number') {
+    const articleId = req.body.fillProbeV2 as number;
+    type V2Attempt = {
+      label: string;
+      method: 'POST' | 'PUT';
+      path: string;
+      body: unknown;
+      status: number;
+      bodyExcerpt: string;
+    };
+    const v2: V2Attempt[] = [];
+    const probeBody = `__PROBEV2_BODY__<p>这是 sub-resource body 测试</p>`;
+    const readBackAfter = async (label: string) => {
+      await new Promise((r) => setTimeout(r, 400));
+      try {
+        const r = (await ithubFetch<any>(
+          `/api/Knowledge/KnowledgeArticles/${articleId}`,
+          { accessToken },
+        )) as Record<string, unknown>;
+        // Look for any field with our marker
+        const found: { field: string; value: string }[] = [];
+        for (const [k, v] of Object.entries(r)) {
+          if (typeof v === 'string' && v.includes('__PROBEV2_BODY__')) {
+            found.push({ field: k, value: v.slice(0, 200) });
+          }
+        }
+        v2.push({
+          label: `READBACK after ${label}`,
+          method: 'POST',
+          path: '/api/Knowledge/KnowledgeArticles/' + articleId,
+          body: null as any,
+          status: 200,
+          bodyExcerpt: `Summary=${r.Summary}, FoundFields=${JSON.stringify(found)}`,
+        });
+      } catch (e) {
+        v2.push({
+          label: `READBACK after ${label}`,
+          method: 'POST',
+          path: '/api/Knowledge/KnowledgeArticles/' + articleId,
+          body: null as any,
+          status: (e as any)?.status ?? 500,
+          bodyExcerpt: (e as any)?.upstreamMessage ?? (e as any)?.message ?? '',
+        });
+      }
+    };
+    const tryPath = async (label: string, method: 'POST' | 'PUT', path: string, body: unknown) => {
+      try {
+        const data = (await ithubFetch<any>(path, {
+          method, accessToken, body,
+        })) as Record<string, unknown> | null;
+        v2.push({ label, method, path, body, status: 200, bodyExcerpt: JSON.stringify(data ?? null).slice(0, 300) });
+      } catch (e) {
+        const err = e as any;
+        v2.push({
+          label, method, path, body,
+          status: err?.status ?? 500,
+          bodyExcerpt: err?.upstreamMessage ?? err?.message ?? '',
+        });
+      }
+      await readBackAfter(label);
+    };
+    // OData sub-resource paths
+    await tryPath('POST /Articles({id})/Content', 'POST',
+      `/api/Knowledge/KnowledgeArticles(${articleId})/Content`,
+      { Html: probeBody, Text: probeBody });
+    await tryPath('POST /Articles({id})/Body', 'POST',
+      `/api/Knowledge/KnowledgeArticles(${articleId})/Body`,
+      { Html: probeBody, Text: probeBody });
+    await tryPath('POST /Articles({id})/DescriptionText', 'POST',
+      `/api/Knowledge/KnowledgeArticles(${articleId})/DescriptionText`,
+      { Text: probeBody });
+    await tryPath('POST /Articles({id})/Submit', 'POST',
+      `/api/Knowledge/KnowledgeArticles(${articleId})/Submit`,
+      { });
+    await tryPath('POST /Articles({id})/Workflow/Submit', 'POST',
+      `/api/Knowledge/KnowledgeArticles(${articleId})/Workflow/Submit`,
+      { });
+    await tryPath('POST /Articles({id})/Approve', 'POST',
+      `/api/Knowledge/KnowledgeArticles(${articleId})/Approve`,
+      { });
+    await tryPath('POST /Articles({id})/Publish', 'POST',
+      `/api/Knowledge/KnowledgeArticles(${articleId})/Publish`,
+      { });
+    await tryPath('POST /Articles({id})/SubmitForReview', 'POST',
+      `/api/Knowledge/KnowledgeArticles(${articleId})/SubmitForReview`,
+      { });
+    // Body alone (no other fields)
+    await tryPath('PUT /Articles({id}) — just Body', 'PUT',
+      `/api/Knowledge/KnowledgeArticles/${articleId}`,
+      { Body: probeBody });
+    await tryPath('PUT /Articles({id}) — just DescriptionText', 'PUT',
+      `/api/Knowledge/KnowledgeArticles/${articleId}`,
+      { DescriptionText: probeBody });
+    res.json({
+      kbId, fillProbeV2: articleId,
+      v2: v2.map(({ label, method, path, status, bodyExcerpt }) => ({ label, method, path, status, bodyExcerpt })),
+      note: '看哪个 attempt 的 READBACK 段显示 FoundFields=[{field:"X",...}] —— 那个 X 就是 ITHub 实际写 body 的字段。',
+    });
+    return;
+  }
+
   // fillProbe: try multiple PUT field-name candidates for the body
   // field. Each attempt updates the article's Summary to a unique
   // marker so we can see which PUT actually wrote. Then we read back
