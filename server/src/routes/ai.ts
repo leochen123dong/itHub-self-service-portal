@@ -633,3 +633,205 @@ ${turns}`;
     });
   }
 });
+
+// Admin-only debug: probe ITHub's KB write API. Tries several endpoint +
+// body-shape combinations to find the one that actually accepts writes.
+// Each attempt is logged with status, response body excerpt, and
+// resolved article id (if any). Title is prefixed with __PROBE__ so the
+// user can find and delete them in the ITHub admin afterwards.
+//
+// Note: this CAN actually create junk rows in the ITHub KB. Use sparingly.
+//
+// Body: { knowledgeBaseId?: number, dryRun?: boolean }
+//   dryRun=true: only GET-list the existing articles and return their
+//                field names so we can guess the right body without writing.
+//   dryRun=false (default): run all POST attempts.
+aiRouter.post('/_debug/ithub-kb-publish', requireSession, async (req, res): Promise<void> => {
+  if (!config.admin.identities.includes(req.session!.userName)) {
+    res.status(403).json({ error: { code: 'NOT_ADMIN', message_zh: '仅管理员可访问' } });
+    return;
+  }
+  if (!config.ithub.apiKey) {
+    res.status(500).json({ error: { code: 'NO_API_KEY', message_zh: '服务端未配置 ITHUB_API_KEY' } });
+    return;
+  }
+  const accessToken = req.session!.accessToken;
+  const dryRun = req.body?.dryRun === true;
+
+  // Resolve kbId. Caller-provided wins, else auto-discover.
+  let kbId: number | null = typeof req.body?.knowledgeBaseId === 'number' ? req.body.knowledgeBaseId : null;
+  if (!kbId) {
+    try {
+      kbId = await resolveKbId(accessToken, config.ithub.customerTag);
+    } catch {
+      /* null */
+    }
+  }
+  if (!kbId) {
+    res.status(400).json({
+      error: { code: 'NO_KB', message_zh: '未找到 KB。请在请求 body 里传 knowledgeBaseId 或在 .env 配 KB_ID' },
+    });
+    return;
+  }
+
+  // Step 1: GET existing articles to learn the field shape. Cheap and
+  // gives us the real field names (Name vs Title, DescriptionText vs Body)
+  // for this tenant — ITHub is OData so field names are stable per tenant.
+  let existingSample: any = null;
+  try {
+    const list = (await ithubFetch<any[]>(
+      `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+      { accessToken, query: { $top: 1 } },
+    )) as any[];
+    if (Array.isArray(list) && list.length) {
+      existingSample = list[0];
+    }
+  } catch (e) {
+    // fall through — sample is best-effort
+  }
+
+  if (dryRun) {
+    res.json({ kbId, dryRun: true, existingSample, existingKeys: existingSample ? Object.keys(existingSample) : [] });
+    return;
+  }
+
+  // Step 2: try several POST shapes. Use a __PROBE__ prefix so the user
+  // can find and delete these in ITHub admin. Each attempt is independent
+  // — if one succeeds, we still record the others' errors for completeness
+  // and let the user pick the one to wire up.
+  const probeTitle = `__PROBE__ ${new Date().toISOString()}`;
+  const probeBody = '探测条目，用于验证 ITHub KB 写接口的字段命名。';
+
+  type Attempt = {
+    label: string;
+    method: 'POST';
+    path: string;
+    body: Record<string, unknown>;
+    status: number;
+    ok: boolean;
+    bodyExcerpt: string;
+    articleId?: number;
+  };
+
+  const attempts: Attempt[] = [];
+
+  // PascalCase + nested path (the current default in /kb/publish attempt 1)
+  attempts.push({
+    label: 'nested + PascalCase (Name/DescriptionText/KnowledgeBaseId)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Name: probeTitle,
+      Summary: 'probe',
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
+  // PascalCase + top-level path
+  attempts.push({
+    label: 'top + PascalCase (Name/DescriptionText/KnowledgeBaseId)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeArticles`,
+    body: {
+      Name: probeTitle,
+      Summary: 'probe',
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
+  // snake-shape with Title + Content + Identifier (the current attempt 3)
+  attempts.push({
+    label: 'top + Title/Content/Identifier',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeArticles`,
+    body: {
+      Title: probeTitle,
+      Content: probeBody,
+      Summary: 'probe',
+      Identifier: 'K' + Date.now(),
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
+  // snake-shape with Title + Content + KnowledgeBaseId
+  attempts.push({
+    label: 'top + Title/Content/KnowledgeBaseId',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeArticles`,
+    body: {
+      Title: probeTitle,
+      Content: probeBody,
+      Summary: 'probe',
+      KnowledgeBaseId: kbId,
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
+  // nested + Title/Content
+  attempts.push({
+    label: 'nested + Title/Content/KnowledgeBaseId',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Title: probeTitle,
+      Content: probeBody,
+      Summary: 'probe',
+      KnowledgeBaseId: kbId,
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
+  // minimal — just Name + body
+  attempts.push({
+    label: 'nested + Name/Body minimal',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Name: probeTitle,
+      Body: probeBody,
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
+  // Execute each attempt serially. ITHub rate-limits, so 1s spacing is
+  // polite. We don't bail on success — we want to see all results.
+  for (const a of attempts) {
+    try {
+      const data = (await ithubFetch<any>(a.path, {
+        method: a.method,
+        accessToken,
+        body: a.body,
+      })) as Record<string, unknown>;
+      const id = Number(data.KnowledgeArticleId ?? data.Id ?? data.ArticleId);
+      a.status = 200;
+      a.ok = !!id;
+      a.articleId = id || undefined;
+      a.bodyExcerpt = JSON.stringify(data).slice(0, 300);
+    } catch (e) {
+      const err = e as ITHubError;
+      a.status = err.status ?? 500;
+      a.ok = false;
+      a.bodyExcerpt = (err.upstreamMessage ?? err.message ?? '').slice(0, 300);
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  res.json({
+    kbId,
+    dryRun: false,
+    note: '每个 attempt 都会真在 ITHub 创建一行 __PROBE__ 数据。请测完后到 ITHub admin Knowledge 后台手动删除。',
+    existingSample,
+    existingKeys: existingSample ? Object.keys(existingSample) : [],
+    attempts: attempts.map(({ label, path, body, status, ok, bodyExcerpt, articleId }) => ({
+      label, path, body, status, ok, bodyExcerpt, articleId,
+    })),
+  });
+});
