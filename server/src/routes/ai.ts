@@ -506,7 +506,7 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
           // the PUT in step 3 re-sends them so it's the source of truth.
           Summary: String(title).slice(0, 200),
           DescriptionText: String(body),
-          KnowledgeArticleStatus: 1,
+          KnowledgeArticleStatus: 0,
           Active: true,
           AccessFlags: 2147483647,
           KnowledgeArticleAccessFlags: 2147483647,
@@ -582,7 +582,7 @@ aiRouter.post('/kb/publish', requireSession, async (req, res): Promise<void> => 
           KnowledgeCategoryDescription: '',
           Summary: String(title).slice(0, 200),
           DescriptionText: String(body),
-          KnowledgeArticleStatus: 1,
+          KnowledgeArticleStatus: 0,
           Active: true,
           AccessFlags: 2147483647,
           KnowledgeArticleAccessFlags: 2147483647,

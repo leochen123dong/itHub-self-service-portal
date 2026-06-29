@@ -60,7 +60,7 @@ export function KbDraftModal({ open, ticketId, onClose }: Props) {
       const res = await aiApi.kbPublish(draft);
       // Success shape: { articleId, published: true }
       if ('articleId' in res && res.published) {
-        toast({ type: 'success', message: `已发布到 KB #${res.articleId}` });
+        toast({ type: 'success', message: `已保存为 KB 草稿 #${res.articleId}` });
         onClose();
         return;
       }
@@ -184,7 +184,7 @@ export function KbDraftModal({ open, ticketId, onClose }: Props) {
             onClick={publish}
             disabled={!draft || loading || publishing || !draft.title.trim()}
           >
-            {publishing ? '发布中…' : '发布到 KB'}
+            {publishing ? '保存中…' : '保存为草稿'}
           </button>
         </div>
       </div>
