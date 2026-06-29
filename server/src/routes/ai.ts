@@ -804,6 +804,33 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     status: 0, ok: false, bodyExcerpt: '',
   });
 
+  // 7. nested + every field from existingSample (KnowledgeCategoryId,
+  //    AccessFlags, KnowledgeArticleAccessFlags, etc). The previous full
+  //    attempt returned 500 with "Cannot read 'KnowledgeArticleId' of
+  //    undefined" — likely ITHub wrote the row but its response shape is
+  //    different. Filling every field + reading the raw response body
+  //    lets us see what the ITHub return shape actually looks like.
+  attempts.push({
+    label: 'nested + EVERY field from sample (incl. category/access flags)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'f',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      KnowledgeCategoryId: 5,
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      Active: true,
+      KnowledgeArticleStatus: 1,
+      AccessFlags: 2147483647,
+      KnowledgeArticleAccessFlags: 2147483647,
+      KnowledgeArticleServiceDeskAccessFlags: 2147483647,
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
   // Execute each attempt serially. ITHub rate-limits, so 1s spacing is
   // polite. We don't bail on success — we want to see all results.
   for (const a of attempts) {
@@ -812,17 +839,36 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
         method: a.method,
         accessToken,
         body: a.body,
-      })) as Record<string, unknown>;
-      const id = Number(data.KnowledgeArticleId ?? data.Id ?? data.ArticleId);
+      })) as Record<string, unknown> | null | undefined;
       a.status = 200;
+      // The 500 we saw earlier said "Cannot read 'KnowledgeArticleId' of
+      // undefined" — meaning the upstream wrote the row but its return
+      // shape wasn't what we guessed. Probe every plausible field name
+      // and surface the full body so we can see what ITHub actually
+      // returns.
+      const id = Number(
+        (data as any)?.KnowledgeArticleId ??
+        (data as any)?.Id ??
+        (data as any)?.ArticleId ??
+        (data as any)?.ArticleID ??
+        (data as any)?.KBID ??
+        (data as any)?.KnowledgeBaseId,
+      );
       a.ok = !!id;
       a.articleId = id || undefined;
-      a.bodyExcerpt = JSON.stringify(data).slice(0, 300);
+      a.bodyExcerpt = JSON.stringify(data ?? null).slice(0, 500);
     } catch (e) {
-      const err = e as ITHubError;
-      a.status = err.status ?? 500;
+      const err = e as any;
+      a.status = err?.status ?? 500;
       a.ok = false;
-      a.bodyExcerpt = (err.upstreamMessage ?? err.message ?? '').slice(0, 300);
+      // Surface both the upstream message AND the raw response body if
+      // the client wrapper preserved it. ithubFetch throws ITHubError
+      // but the original text is what we want for debugging.
+      const pieces: string[] = [];
+      if (err?.upstreamMessage) pieces.push(err.upstreamMessage);
+      if (err?.message && err.message !== err.upstreamMessage) pieces.push(err.message);
+      if (err?.body && typeof err.body === 'string') pieces.push('BODY: ' + err.body.slice(0, 300));
+      a.bodyExcerpt = pieces.join(' | ').slice(0, 600) || '(no detail)';
     }
     await new Promise((r) => setTimeout(r, 250));
   }
