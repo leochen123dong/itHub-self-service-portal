@@ -711,14 +711,54 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
 
   const attempts: Attempt[] = [];
 
-  // PascalCase + nested path (the current default in /kb/publish attempt 1)
+  // ITHub KB articles don't have a Name/Title field — Identifier is the
+  // human-readable code (e.g. "K100003") and Summary is the one-line title.
+  // DescriptionText holds the long body. Required-ish links from
+  // existingSample: KnowledgeBaseId, CustomerId, CustomerTag, Active.
+  const probeIdentifier = 'K' + Date.now();
+
+  // 1. nested + full payload (all the fields we saw on the sample)
   attempts.push({
-    label: 'nested + PascalCase (Name/DescriptionText/KnowledgeBaseId)',
+    label: 'nested + full (Identifier/Summary/DescriptionText + base+cust)',
     method: 'POST',
     path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
     body: {
-      Name: probeTitle,
-      Summary: 'probe',
+      Identifier: probeIdentifier,
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
+  // 2. top-level + same full payload
+  attempts.push({
+    label: 'top + full (Identifier/Summary/DescriptionText + base+cust)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'a',
+      Summary: probeTitle,
+      DescriptionText: probeBody,
+      KnowledgeBaseId: kbId,
+      CustomerId: 3,
+      CustomerTag: 'demo',
+      Active: true,
+    },
+    status: 0, ok: false, bodyExcerpt: '',
+  });
+
+  // 3. nested + minimal (no CustomerId/Tag)
+  attempts.push({
+    label: 'nested + minimal (Identifier/Summary/DescriptionText + base)',
+    method: 'POST',
+    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    body: {
+      Identifier: probeIdentifier + 'b',
+      Summary: probeTitle,
       DescriptionText: probeBody,
       KnowledgeBaseId: kbId,
       Active: true,
@@ -726,14 +766,14 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     status: 0, ok: false, bodyExcerpt: '',
   });
 
-  // PascalCase + top-level path
+  // 4. top-level + minimal
   attempts.push({
-    label: 'top + PascalCase (Name/DescriptionText/KnowledgeBaseId)',
+    label: 'top + minimal (Identifier/Summary/DescriptionText + base)',
     method: 'POST',
     path: `/api/Knowledge/KnowledgeArticles`,
     body: {
-      Name: probeTitle,
-      Summary: 'probe',
+      Identifier: probeIdentifier + 'c',
+      Summary: probeTitle,
       DescriptionText: probeBody,
       KnowledgeBaseId: kbId,
       Active: true,
@@ -741,58 +781,25 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     status: 0, ok: false, bodyExcerpt: '',
   });
 
-  // snake-shape with Title + Content + Identifier (the current attempt 3)
+  // 5. nested + just Identifier + Summary (test if KB ID alone is enough)
   attempts.push({
-    label: 'top + Title/Content/Identifier',
-    method: 'POST',
-    path: `/api/Knowledge/KnowledgeArticles`,
-    body: {
-      Title: probeTitle,
-      Content: probeBody,
-      Summary: 'probe',
-      Identifier: 'K' + Date.now(),
-    },
-    status: 0, ok: false, bodyExcerpt: '',
-  });
-
-  // snake-shape with Title + Content + KnowledgeBaseId
-  attempts.push({
-    label: 'top + Title/Content/KnowledgeBaseId',
-    method: 'POST',
-    path: `/api/Knowledge/KnowledgeArticles`,
-    body: {
-      Title: probeTitle,
-      Content: probeBody,
-      Summary: 'probe',
-      KnowledgeBaseId: kbId,
-      Active: true,
-    },
-    status: 0, ok: false, bodyExcerpt: '',
-  });
-
-  // nested + Title/Content
-  attempts.push({
-    label: 'nested + Title/Content/KnowledgeBaseId',
+    label: 'nested + Identifier + Summary only',
     method: 'POST',
     path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
     body: {
-      Title: probeTitle,
-      Content: probeBody,
-      Summary: 'probe',
-      KnowledgeBaseId: kbId,
-      Active: true,
+      Identifier: probeIdentifier + 'd',
+      Summary: probeTitle,
     },
     status: 0, ok: false, bodyExcerpt: '',
   });
 
-  // minimal — just Name + body
+  // 6. top-level + bare-minimum (only Identifier, no Summary at all)
   attempts.push({
-    label: 'nested + Name/Body minimal',
+    label: 'top + Identifier only',
     method: 'POST',
-    path: `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
+    path: `/api/Knowledge/KnowledgeArticles`,
     body: {
-      Name: probeTitle,
-      Body: probeBody,
+      Identifier: probeIdentifier + 'e',
     },
     status: 0, ok: false, bodyExcerpt: '',
   });
