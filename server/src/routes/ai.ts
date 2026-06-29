@@ -424,20 +424,31 @@ ${content}`;
 
 // POST /api/ai/kb/publish — write a KB article to ITHub.
 //
-// 2-step flow (verified by _debug probe in commits 6f126d3 + bb8af69 +
-// fc9f742 + 2eaacdb):
+// 2-step flow (verified by _debug probes fillProbe / fillProbeV2-V5):
 //   1. POST creates a draft with metadata (Identifier, CustomerId/Tag,
 //      KnowledgeBaseId, ParentKnowledgeCategoryId, KnowledgeCategoryId).
 //      ITHub accepts it with 200 + null body, but **silently drops the
-//      content fields** (Summary, DescriptionText, Active, Status) —
+//      content fields** (Summary, Description, Active, Status) —
 //      the resulting row has no title, no body, and Status=Draft.
-//   2. GET the list, match by Identifier → articleId.
+//   2. GET the list, match by Summary → articleId. ITHub rewrites our
+//      long "K{Date.now()}" Identifier to "K{articleId}" internally, so
+//      we can't match by Identifier. Read replica lags the write by
+//      3-5s, so retry with backoff up to ~15s.
 //   3. PUT the article at the **top-level** path
 //      `/api/Knowledge/KnowledgeArticles/{articleId}` (NOT the nested
 //      `/KnowledgeBases/{kbId}/KnowledgeArticles/{id}` — that returns
 //      404, and PATCH is 405). ITHub's top-level PUT handler writes
-//      Summary, DescriptionText, Status, and Active correctly. Body
-//      comes back as the literal `true` on success.
+//      Summary, Description, Status, and Active correctly.
+//
+// GOTCHA — body field name is **`Description`** (not `DescriptionText`).
+// Verified by fillProbeV4 GET keys `["Summary", "Description"]` and the
+// working kbRepair run on K100103. `DescriptionText` is silently dropped
+// on PUT — returns 200 but no write. Other rejected names (Body/Content/
+// Html/Text) also silently drop. Don't rename back to DescriptionText.
+//
+// GOTCHA — `CustomerTag` in body MUST equal `config.ithub.customerTag`
+// (the SESSION's customer tag), NOT the admin sample's "demo" tag. A
+// mismatch silently rolls back even the metadata fields.
 //
 // `CustomerTag` must be the SESSION's customer tag (config.ithub
 // .customerTag) — not the existingSample's "demo" tag. Mismatched
