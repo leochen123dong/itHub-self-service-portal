@@ -5,9 +5,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  headerActions?: ReactNode;
 }
 
-export function Drawer({ title, open, onClose, children }: Props) {
+export function Drawer({ title, open, onClose, children, headerActions }: Props) {
   if (!open) return null;
   return (
     <>
@@ -15,7 +16,10 @@ export function Drawer({ title, open, onClose, children }: Props) {
       <aside className="drawer">
         <div className="drawer-header">
           <h3 style={{ margin: 0, fontSize: 18 }}>{title}</h3>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>关闭</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {headerActions}
+            <button className="btn btn-ghost btn-sm" onClick={onClose}>关闭</button>
+          </div>
         </div>
         <div className="drawer-body">{children}</div>
       </aside>

@@ -89,6 +89,8 @@ export function KbPage() {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [openArticle, setOpenArticle] = useState<KnowledgeArticle | null>(null);
+  const [openArticleRefreshing, setOpenArticleRefreshing] = useState(false);
+  const [refreshingList, setRefreshingList] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadArticles = async () => {
@@ -119,14 +121,47 @@ export function KbPage() {
     }
   };
 
-  const openKbArticle = async (id: number | string) => {
+  // 每次点开一篇文章都重新拉一遍 ——
+  // 因为 ITHub admin 端可能已经改了状态/分类/正文，本地 list 缓存
+  // 落后 3-5+s 是常态。所以即使同一篇文章也要重新拉详情，确保
+  // Drawer 看到的是 ITHub 最新值（openKbArticle 里再 fetch 一次）
+  const refreshList = async () => {
+    setRefreshingList(true);
     try {
-      const a = await kbApi.getArticle(id);
-      setOpenArticle(a);
+      const r = await kbApi.listArticles();
+      setArticles(Array.isArray(r) ? r : []);
     } catch {
-      // fall back to what we have
-      const cached = (results || articles).find((x) => String(x.KnowledgeArticleId) === String(id));
-      if (cached) setOpenArticle(cached);
+      // 静默失败 —— 列表刷新不影响查看
+    } finally {
+      setRefreshingList(false);
+    }
+  };
+
+  const fetchArticleById = async (id: number | string): Promise<KnowledgeArticle | null> => {
+    try {
+      return await kbApi.getArticle(id);
+    } catch {
+      return (results || articles).find((x) => String(x.KnowledgeArticleId) === String(id)) ?? null;
+    }
+  };
+
+  const openKbArticle = async (id: number | string) => {
+    // 先清空状态，再拉新数据 —— 这样即使用户连续点同一篇文章，
+    // React 也会触发"setOpenArticle(null) → setOpenArticle(...)"两次
+    // 重渲染，组件彻底刷新；同时 Loading 态可见。
+    setOpenArticle(null);
+    const a = await fetchArticleById(id);
+    if (a) setOpenArticle(a);
+  };
+
+  const refreshOpenArticle = async () => {
+    if (!openArticle) return;
+    setOpenArticleRefreshing(true);
+    try {
+      const a = await fetchArticleById(openArticle.KnowledgeArticleId);
+      if (a) setOpenArticle(a);
+    } finally {
+      setOpenArticleRefreshing(false);
     }
   };
 
@@ -157,6 +192,16 @@ export function KbPage() {
           {results && (
             <button className="btn btn-secondary" onClick={() => { setResults(null); setQuery(''); }}>
               清除
+            </button>
+          )}
+          {!results && (
+            <button
+              className="btn btn-secondary"
+              onClick={refreshList}
+              disabled={refreshingList}
+              title="从 ITHub 重新拉一次列表"
+            >
+              {refreshingList ? '刷新中…' : '刷新列表'}
             </button>
           )}
         </div>
@@ -207,8 +252,22 @@ export function KbPage() {
         }
         open={!!openArticle}
         onClose={() => setOpenArticle(null)}
+        headerActions={
+          openArticle ? (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={refreshOpenArticle}
+              disabled={openArticleRefreshing}
+              title="从 ITHub 重新拉一次详情"
+            >
+              {openArticleRefreshing ? '刷新中…' : '刷新'}
+            </button>
+          ) : null
+        }
       >
-        {openArticle && <KbVersionInfo article={openArticle} />}
+        {openArticle ? <KbVersionInfo article={openArticle} /> : (
+          <div className="skeleton" style={{ height: 64 }} />
+        )}
         <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, marginTop: 16 }}>
           {(() => {
             const raw = safeStr(
