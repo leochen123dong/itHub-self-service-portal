@@ -828,6 +828,176 @@ aiRouter.post('/_debug/ithub-kb-publish', requireSession, requireAdmin, async (r
     return;
   }
 
+  // fillProbeV4: previous probes returned 200 but didn't write DescriptionText.
+  // Probe 5 in fillProbeV3 hit a SQL UPDATE error: "Cannot insert NULL into
+  // KNOWLEDGECATEGORY_ID" — meaning ITHub's PUT is a full SQL UPDATE and
+  // needs EVERY NOT NULL field present in the body. Our minimal-body probes
+  // were missing required fields and silently rolling back.
+  //
+  // Strategy: GET the article's current full record, mutate Summary +
+  // DescriptionText with probe markers, then PUT back the COMPLETE record.
+  // Also try nested Description.{Html,Text} shape and raw text/html POST.
+  if (typeof req.body?.fillProbeV4 === 'number') {
+    const articleId = req.body.fillProbeV4 as number;
+    const baseUrl = config.ithub.baseUrl;
+    const accessToken = req.session!.accessToken;
+    const probeSummary = `__PROBEV4_SUMMARY__ ${new Date().toISOString()}`;
+    const probeBody = `__PROBEV4_BODY__<p>这是 V4 body 测试</p>`;
+    const results: any[] = [];
+
+    const tryRequest = async (
+      label: string,
+      method: 'POST' | 'PUT',
+      path: string,
+      body: unknown,
+      contentType?: string,
+      extraHeaders: Record<string, string> = {},
+    ) => {
+      const url = new URL(path, baseUrl);
+      url.searchParams.set('customerTag', config.ithub.customerTag);
+      const headers: Record<string, string> = {
+        ...(accessToken ? { AccessToken: accessToken } : {}),
+        ...(config.ithub.apiKey ? { ApiKey: config.ithub.apiKey } : {}),
+        ...extraHeaders,
+      };
+      if (contentType) headers['Content-Type'] = contentType;
+      const wireBody =
+        body === undefined
+          ? undefined
+          : typeof body === 'string'
+            ? body
+            : JSON.stringify(body);
+      try {
+        const r = await fetch(url.toString(), {
+          method,
+          headers,
+          body: wireBody,
+          signal: AbortSignal.timeout(15000),
+        });
+        const text = await r.text();
+        results.push({
+          label,
+          method,
+          path,
+          status: r.status,
+          excerpt: text.slice(0, 300),
+        });
+      } catch (e) {
+        results.push({ label, method, path, status: 0, error: (e as Error)?.message });
+      }
+    };
+
+    const readBack = async (label: string) => {
+      // Read replica lag — wait 2s before checking
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const r = (await ithubFetch<any>(
+          `/api/Knowledge/KnowledgeArticles/${articleId}`,
+          { accessToken },
+        )) as Record<string, unknown>;
+        const found: { field: string; value: string }[] = [];
+        for (const [k, v] of Object.entries(r)) {
+          if (typeof v === 'string' && (v.includes('__PROBEV4_BODY__') || v.includes('__PROBEV4_SUMMARY__'))) {
+            found.push({ field: k, value: v.slice(0, 100) });
+          }
+        }
+        results.push({
+          label: `READBACK after ${label}`,
+          status: 200,
+          summary: r.Summary as string,
+          descriptionLen: typeof r.DescriptionText === 'string' ? (r.DescriptionText as string).length : null,
+          descriptionPreview:
+            typeof r.DescriptionText === 'string'
+              ? (r.DescriptionText as string).slice(0, 100)
+              : null,
+          bodyKeys: Object.keys(r).filter((k) =>
+            ['Html', 'Body', 'Content', 'Description', 'Text', 'Summary'].includes(k),
+          ),
+          found,
+        });
+      } catch (e) {
+        results.push({ label: `READBACK after ${label}`, status: 0, error: (e as Error)?.message });
+      }
+    };
+
+    // Fetch the full current record so we have every column.
+    let fullRecord: Record<string, unknown> = {};
+    try {
+      fullRecord = (await ithubFetch<any>(
+        `/api/Knowledge/KnowledgeArticles/${articleId}`,
+        { accessToken },
+      )) as Record<string, unknown>;
+      results.push({
+        label: 'GET current article',
+        status: 200,
+        keys: Object.keys(fullRecord),
+        categoryId: fullRecord.KnowledgeCategoryId,
+        parentCategoryId: fullRecord.ParentKnowledgeCategoryId,
+        existingSummary: fullRecord.Summary,
+        existingDescLen: typeof fullRecord.DescriptionText === 'string' ? (fullRecord.DescriptionText as string).length : null,
+      });
+    } catch (e) {
+      results.push({ label: 'GET current article', status: 0, error: (e as Error)?.message });
+    }
+
+    // Probe A: PUT complete record with DescriptionText set, Summary mutated
+    {
+      const body = {
+        ...fullRecord,
+        Summary: probeSummary,
+        DescriptionText: probeBody,
+      };
+      await tryRequest('PUT full record + DescriptionText', 'PUT', `/api/Knowledge/KnowledgeArticles/${articleId}`, body);
+      await readBack('PUT full record + DescriptionText');
+    }
+
+    // Probe B: PUT complete record with nested Description: { Html, Text }
+    {
+      const body = {
+        ...fullRecord,
+        Summary: probeSummary,
+        Description: { Html: probeBody, Text: probeBody },
+      };
+      await tryRequest('PUT full record + Description.Html nested', 'PUT', `/api/Knowledge/KnowledgeArticles/${articleId}`, body);
+      await readBack('PUT full record + Description.Html nested');
+    }
+
+    // Probe C: POST /Content with raw text/html body
+    {
+      await tryRequest('POST /Content raw text/html', 'POST', `/api/Knowledge/KnowledgeArticles/${articleId}/Content`, probeBody, 'text/html');
+      await readBack('POST /Content raw text/html');
+    }
+
+    // Probe D: POST /Content with raw text/plain
+    {
+      await tryRequest('POST /Content raw text/plain', 'POST', `/api/Knowledge/KnowledgeArticles/${articleId}/Content`, probeBody, 'text/plain');
+      await readBack('POST /Content raw text/plain');
+    }
+
+    // Probe E: PUT with Html field (snake/camel)
+    {
+      const body = { ...fullRecord, Summary: probeSummary, Html: probeBody };
+      await tryRequest('PUT full record + Html', 'PUT', `/api/Knowledge/KnowledgeArticles/${articleId}`, body);
+      await readBack('PUT full record + Html');
+    }
+
+    // Probe F: PUT with Description.HtmlText
+    {
+      const body = { ...fullRecord, Summary: probeSummary, DescriptionHtmlText: probeBody };
+      await tryRequest('PUT full record + DescriptionHtmlText', 'PUT', `/api/Knowledge/KnowledgeArticles/${articleId}`, body);
+      await readBack('PUT full record + DescriptionHtmlText');
+    }
+
+    res.json({
+      kbId,
+      fillProbeV4: articleId,
+      results,
+      note:
+        '看 READBACK 段 descriptionLen / descriptionPreview —— 如果 preview 含 __PROBEV4_BODY__，就是它把 body 写进去了。PUT 必须用完整记录（v3 已证明）。',
+    });
+    return;
+  }
+
   // fillProbeV2: PUT/POST 各种 sub-resource 路径找 body 写入端点。
   // 之前的 fillProbe 测了 11 个 body 字段名（DescriptionText/Body/Content
   // /Description/Html/...）都 200 但 readBack 都没内容。说明 PUT
