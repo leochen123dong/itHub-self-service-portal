@@ -4,6 +4,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { sessionMiddleware } from './session/middleware.js';
+import { hydrateFromEnv as hydrateDefaultTemplate } from './adminUsers/templateConfigStore.js';
 import { healthRouter } from './routes/health.js';
 import { authRouter } from './routes/auth.js';
 import { aiRouter } from './routes/ai.js';
@@ -78,5 +79,16 @@ app.listen(config.port, () => {
   console.log(`   Customer:  ${config.ithub.customerTag}`);
   console.log(`   AI Profile: ${config.ai.profileId ?? '(auto-discover at runtime via /api/ai/profiles)'}`);
   console.log(`   KB ID:      ${config.ai.kbId ?? '(set KB_ID in .env)'}`);
-  console.log(`   Web origin: ${config.webOrigins.join(', ')}\n`);
+  console.log(`   Web origin: ${config.webOrigins.join(', ')}`);
+
+  // Pre-load admin-configurable defaults from env on boot. Runtime overrides
+  // via /api/admin-users/default-incident-template take precedence over this.
+  hydrateDefaultTemplate(config.tickets.defaultIncidentTemplateId ?? undefined);
+  const initialDefault = Number(config.tickets.defaultIncidentTemplateId);
+  if (Number.isFinite(initialDefault) && initialDefault > 0) {
+    console.log(`   Default incident template: ${initialDefault} (from env ITHUB_DEFAULT_INCIDENT_TEMPLATE_ID)`);
+  } else {
+    console.log(`   Default incident template: (unset — escalate uses heuristic)`);
+  }
+  console.log();
 });

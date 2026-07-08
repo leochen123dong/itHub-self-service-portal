@@ -26,6 +26,10 @@ import {
   summary as usageSummary,
   type CallRecord,
 } from '../adminUsers/usageTracker.js';
+import {
+  getDefaultIncidentTemplateId,
+  setDefaultIncidentTemplateId,
+} from '../adminUsers/templateConfigStore.js';
 
 export const adminUsersRouter = Router();
 
@@ -69,6 +73,51 @@ function summarize(u: any) {
     _unresolved: false,
   };
 }
+
+// ---------------------------------------------------------------------------
+// GET /default-incident-template — admin override for AI-chat → ticket
+// escalation. Falls back to ITHUB_DEFAULT_INCIDENT_TEMPLATE_ID env if the
+// admin has not set one.
+// ---------------------------------------------------------------------------
+adminUsersRouter.get('/default-incident-template', (_req, res): Promise<void> => {
+  res.json({ templateId: getDefaultIncidentTemplateId() });
+  return Promise.resolve();
+});
+
+// ---------------------------------------------------------------------------
+// POST /default-incident-template — set the escalation override.
+// Body: { templateId: number | null }
+// ---------------------------------------------------------------------------
+adminUsersRouter.post('/default-incident-template', (req, res): Promise<void> => {
+  const body = req.body ?? {};
+  if (body.templateId === null || body.templateId === undefined) {
+    setDefaultIncidentTemplateId(null);
+    recordAudit({
+      userId: 0,
+      action: 'PERMISSIONS_UPDATED', // closest enum value; signals admin config change
+      actor: req.session!.identity,
+      detail: 'cleared default escalation template',
+    });
+    res.json({ templateId: null });
+    return Promise.resolve();
+  }
+  const n = Number(body.templateId);
+  if (!Number.isFinite(n) || n <= 0) {
+    res.status(400).json({
+      error: { code: 'INVALID', message_zh: 'templateId 必须是正整数或 null' },
+    });
+    return Promise.resolve();
+  }
+  setDefaultIncidentTemplateId(n);
+  recordAudit({
+    userId: 0,
+    action: 'PERMISSIONS_UPDATED',
+    actor: req.session!.identity,
+    detail: `set default escalation template=${n}`,
+  });
+  res.json({ templateId: n });
+  return Promise.resolve();
+});
 
 // ---------------------------------------------------------------------------
 // GET /directory?seedIds=...

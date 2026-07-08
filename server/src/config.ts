@@ -81,6 +81,13 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
   },
+
+  tickets: {
+    // Admin-configurable default TicketTemplateId for AI-chat → ticket
+    // escalation. Falls through to chatStore's heuristic if unset. The
+    // admin can override at runtime via /api/admin-users/default-incident-template.
+    defaultIncidentTemplateId: optional('ITHUB_DEFAULT_INCIDENT_TEMPLATE_ID'),
+  },
 };
 
 export type AppConfig = typeof config;

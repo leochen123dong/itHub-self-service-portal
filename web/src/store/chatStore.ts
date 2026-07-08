@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { aiApi } from '../api/ai';
 import { ticketsApi } from '../api/tickets';
 import { catalogApi } from '../api/catalog';
+import { adminUsersApi } from '../api/adminUsers';
 import type { ChatMessage, SuggestedAction } from '../types/api';
 
 // Cached after first successful fetch so we don't re-list templates on every
@@ -11,6 +12,24 @@ let cachedTemplateId: number | null = null;
 
 async function resolveTemplateId(): Promise<number | null> {
   if (cachedTemplateId !== null) return cachedTemplateId;
+  // First try the admin-configured override. If set, it's authoritative —
+  // this avoids hitting the heuristic at all when the admin has chosen a
+  // template explicitly. If the admin override call fails (network etc.)
+  // we silently fall through to the heuristic below.
+  try {
+    const r = await adminUsersApi.getDefaultIncidentTemplate();
+    const id = r?.templateId;
+    if (typeof id === 'number' && id > 0) {
+      cachedTemplateId = id;
+      console.log('[ticket] using admin-configured default template:', id);
+      return cachedTemplateId;
+    }
+  } catch (e) {
+    console.warn(
+      '[ticket] admin default template lookup failed, falling back to heuristic:',
+      (e as Error)?.message,
+    );
+  }
   try {
     const templates = await catalogApi.list();
     if (!Array.isArray(templates) || templates.length === 0) {
@@ -275,7 +294,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (!templateId) {
         console.error('[ticket] no TicketTemplateId available, cannot create');
-        throw new Error('未找到可用的工单模板');
+        // Tell the user what to do (or the admin) — without a configured
+        // default the heuristic couldn't pick anything usable. The admin
+        // can fix this at /admin/api-users → 设置默认模板.
+        throw new Error(
+          '未找到可用的工单模板。请联系管理员在「API 使用管理」页设置默认工单模板，或刷新页面后重试。',
+        );
       }
 
       // Ask MiniMax to compress the whole transcript into ≤80 zh chars. The

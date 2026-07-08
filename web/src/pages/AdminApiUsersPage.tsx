@@ -187,6 +187,10 @@ export function AdminApiUsersPage() {
         </div>
       </div>
 
+      {/* Default escalation template — admin-configurable escape hatch for
+          the AI-chat → ticket "转人工" flow when the heuristic can't pick. */}
+      <DefaultTemplateCard />
+
       {loading && (
         <div className="card">
           <div className="skeleton" style={{ height: 200 }} />
@@ -374,6 +378,119 @@ export function AdminApiUsersPage() {
           </label>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DefaultTemplateCard
+//
+// Admin-only card that lets the operator pick a single TicketTemplateId as
+// the override for AI-chat → ticket escalation. Set this to bypass the
+// heuristic in chatStore.resolveTemplateId when it can't pick a usable
+// template (e.g. the calling user has no detail-access to any candidate).
+// ---------------------------------------------------------------------------
+function DefaultTemplateCard() {
+  const toast = useUiStore((s) => s.toast);
+  const [templateId, setTemplateId] = useState<number | null>(null);
+  const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const reload = async () => {
+    setLoading(true);
+    try {
+      const r = await adminUsersApi.getDefaultIncidentTemplate();
+      setTemplateId(r.templateId);
+      setDraft(r.templateId ? String(r.templateId) : '');
+    } catch {
+      setTemplateId(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  const handleSave = async () => {
+    const trimmed = draft.trim();
+    const parsed = trimmed === '' ? null : Number(trimmed);
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed <= 0)) {
+      toast({ type: 'error', message: '请输入正整数或留空' });
+      return;
+    }
+    try {
+      const r = await adminUsersApi.setDefaultIncidentTemplate(parsed);
+      setTemplateId(r.templateId);
+      setEditing(false);
+      toast({
+        type: 'success',
+        message: parsed
+          ? `默认模板已设为 #${parsed}`
+          : '默认模板已清空（恢复启发式）',
+      });
+    } catch (e) {
+      toast({
+        type: 'error',
+        message: '保存失败：' + (e instanceof ApiError ? e.message : ''),
+      });
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 500 }}>
+            默认工单模板（AI 转人工）
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            设置后，「转人工」开单会优先用此模板，未设置时回退到启发式自动选择。
+            可填 TicketTemplateId（如 5）；留空则清除。
+          </div>
+        </div>
+        {!editing && !loading && (
+          <>
+            <code style={{ fontSize: 14 }}>
+              {templateId ? `#${templateId}` : '未设置'}
+            </code>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setDraft(templateId ? String(templateId) : '');
+                setEditing(true);
+              }}
+            >
+              {templateId ? '修改' : '设置'}
+            </button>
+          </>
+        )}
+        {loading && (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>加载中…</span>
+        )}
+        {editing && (
+          <>
+            <input
+              className="input"
+              style={{ width: 120 }}
+              placeholder="模板 ID"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <button className="btn btn-primary btn-sm" onClick={handleSave}>
+              保存
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setEditing(false)}
+            >
+              取消
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -126,4 +126,16 @@ export const adminUsersApi = {
       `/admin-users/audit?${parts.join('&')}`,
     );
   },
+
+  // GET /default-incident-template — admin override for AI-chat escalation.
+  // Returns { templateId: number | null }.
+  getDefaultIncidentTemplate: () =>
+    api.get<{ templateId: number | null }>(`/admin-users/default-incident-template`),
+
+  // POST /default-incident-template — set admin override. Pass null to clear.
+  setDefaultIncidentTemplate: (templateId: number | null) =>
+    api.post<{ templateId: number | null }>(
+      `/admin-users/default-incident-template`,
+      { templateId },
+    ),
 };
