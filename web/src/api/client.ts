@@ -2,6 +2,12 @@
 
 const BASE = (import.meta.env.VITE_API_BASE as string) || '/api';
 
+// Sentinel for "session expired" — fired at most once per minute so a
+// burst of 401s doesn't spam toasts and doesn't fire on auth/login
+// endpoints themselves (those are expected to 401 when the user isn't
+// yet logged in).
+let lastSessionExpiredToast = 0;
+
 export class ApiError extends Error {
   status: number;
   code: string;
@@ -40,6 +46,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const err = body?.error;
+    // Surface session-expiry as a window-level event so the app can show
+    // a single global toast and prompt re-login. Skip auth endpoints
+    // themselves (a 401 from /api/auth/login is expected for wrong creds,
+    // not session expiry).
+    if (
+      res.status === 401 &&
+      !path.startsWith('/auth/') &&
+      !path.startsWith('/api/auth/') &&
+      Date.now() - lastSessionExpiredToast > 60_000
+    ) {
+      lastSessionExpiredToast = Date.now();
+      window.dispatchEvent(
+        new CustomEvent('ithub:session-expired', { detail: { path } }),
+      );
+    }
     if (err?.message_zh) {
       throw new ApiError(res.status, err.code, err.message_zh);
     }

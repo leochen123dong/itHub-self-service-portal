@@ -1,9 +1,12 @@
+import { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useUiStore } from '../store/uiStore';
 
 export function Layout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const toast = useUiStore((s) => s.toast);
   const navigate = useNavigate();
 
   const initial = user?.userName?.[0]?.toUpperCase() || user?.identity?.[0]?.toUpperCase() || '?';
@@ -12,6 +15,22 @@ export function Layout() {
     await logout();
     navigate('/login');
   };
+
+  // Listen for session-expiry events from api/client.ts. When the backend
+  // returns 401 on a non-auth endpoint, fire a single toast per minute
+  // prompting the user to log back in. Layout is mounted for every
+  // authenticated page so this catches 401s from anywhere in the app.
+  useEffect(() => {
+    const handler = () => {
+      toast({
+        type: 'error',
+        message: '会话已过期，请重新登录',
+        action: { label: '去登录', href: '/login' },
+      });
+    };
+    window.addEventListener('ithub:session-expired', handler);
+    return () => window.removeEventListener('ithub:session-expired', handler);
+  }, [toast]);
 
   return (
     <nav className="topnav">

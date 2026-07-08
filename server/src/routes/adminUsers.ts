@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import { ithubFetch } from '../http/ithubClient.js';
 import { ITHubError } from '../http/errors.js';
 import { requireSession } from '../session/middleware.js';
@@ -33,9 +33,12 @@ import {
 
 export const adminUsersRouter = Router();
 
-// Every endpoint requires an authenticated admin session.
-// Mirrors /api/ai/admin/* guard pattern from routes/ai.ts.
-adminUsersRouter.use(requireSession, requireAdmin);
+// Per-route guards: most endpoints require admin, but a handful (like
+// the default-incident-template GET which is read by EVERY user's
+// escalate flow) only need session. Admin-only routes get
+// adminOnlyGuard; session-only routes get sessionGuard. The router-wide
+// `use()` middleware was removed so individual routes can opt out.
+
 
 // Shared error→JSON helper. Same shape as routes/admin.ts.
 function err(e: unknown, fallback: string) {
@@ -76,10 +79,11 @@ function summarize(u: any) {
 
 // ---------------------------------------------------------------------------
 // GET /default-incident-template — admin override for AI-chat → ticket
-// escalation. Falls back to ITHUB_DEFAULT_INCIDENT_TEMPLATE_ID env if the
-// admin has not set one.
+// escalation. SESSION-only (not admin-only): every user needs to read
+// this during the escalate flow, including non-admin identities like Leo.
+// Falls back to ITHUB_DEFAULT_INCIDENT_TEMPLATE_ID env if not set in-memory.
 // ---------------------------------------------------------------------------
-adminUsersRouter.get('/default-incident-template', (_req, res): Promise<void> => {
+adminUsersRouter.get('/default-incident-template', requireSession, (_req, res): Promise<void> => {
   res.json({ templateId: getDefaultIncidentTemplateId() });
   return Promise.resolve();
 });
@@ -87,8 +91,9 @@ adminUsersRouter.get('/default-incident-template', (_req, res): Promise<void> =>
 // ---------------------------------------------------------------------------
 // POST /default-incident-template — set the escalation override.
 // Body: { templateId: number | null }
+// ADMIN-only: only admins should configure shared escalation defaults.
 // ---------------------------------------------------------------------------
-adminUsersRouter.post('/default-incident-template', (req, res): Promise<void> => {
+adminUsersRouter.post('/default-incident-template', requireSession, requireAdmin, (req, res): Promise<void> => {
   const body = req.body ?? {};
   if (body.templateId === null || body.templateId === undefined) {
     setDefaultIncidentTemplateId(null);
@@ -125,7 +130,7 @@ adminUsersRouter.post('/default-incident-template', (req, res): Promise<void> =>
 // Aggregates user IDs from UserGroups + seed + manual paste, fans out to
 // GET /api/Security/Users/{id} (with cache) for each.
 // ---------------------------------------------------------------------------
-adminUsersRouter.get('/directory', async (req, res): Promise<void> => {
+adminUsersRouter.get('/directory', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const seedParam = String(req.query.seedIds ?? '');
   const manualIds = seedParam
     ? seedParam.split(',').map((s) => Number(s.trim())).filter(Number.isFinite)
@@ -184,7 +189,7 @@ adminUsersRouter.get('/directory', async (req, res): Promise<void> => {
 // adminApi.getObservedGroups() which only returns groups we've seen
 // attached to a customer we've resolved before.
 // ---------------------------------------------------------------------------
-adminUsersRouter.get('/user-groups', async (req, res): Promise<void> => {
+adminUsersRouter.get('/user-groups', requireSession, requireAdmin, async (req, res): Promise<void> => {
   try {
     const data = await ithubFetch<any>('/api/Security/UserGroups', {
       accessToken: req.session!.accessToken,
@@ -206,7 +211,7 @@ adminUsersRouter.get('/user-groups', async (req, res): Promise<void> => {
 // ---------------------------------------------------------------------------
 // GET /users/:id
 // ---------------------------------------------------------------------------
-adminUsersRouter.get('/users/:id', async (req, res): Promise<void> => {
+adminUsersRouter.get('/users/:id', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
     res.status(400).json({ error: { code: 'INVALID', message_zh: '无效的用户 ID' } });
@@ -247,7 +252,7 @@ adminUsersRouter.get('/users/:id', async (req, res): Promise<void> => {
 // POST /users/:id/api-key — generate a new API key (ITHub rotates existing).
 // Returns the literal key string. UI shows it once with a copy button.
 // ---------------------------------------------------------------------------
-adminUsersRouter.post('/users/:id/api-key', async (req, res): Promise<void> => {
+adminUsersRouter.post('/users/:id/api-key', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   try {
     const key = await ithubFetch<string>(`/api/Security/Users/${id}/ApiKey`, {
@@ -270,7 +275,7 @@ adminUsersRouter.post('/users/:id/api-key', async (req, res): Promise<void> => {
 // ---------------------------------------------------------------------------
 // DELETE /users/:id/api-key — revoke the user's API key.
 // ---------------------------------------------------------------------------
-adminUsersRouter.delete('/users/:id/api-key', async (req, res): Promise<void> => {
+adminUsersRouter.delete('/users/:id/api-key', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   try {
     await ithubFetch<boolean>(`/api/Security/Users/${id}/ApiKey`, {
@@ -297,7 +302,7 @@ adminUsersRouter.delete('/users/:id/api-key', async (req, res): Promise<void> =>
 // GET first, mutate the flag, then PUT back. Cache invalidation runs after
 // the PUT so subsequent reads see fresh data.
 // ---------------------------------------------------------------------------
-adminUsersRouter.put('/users/:id/permissions', async (req, res): Promise<void> => {
+adminUsersRouter.put('/users/:id/permissions', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const flags = Number(req.body?.userAccessFlags);
   if (!Number.isFinite(flags)) {
@@ -338,7 +343,7 @@ adminUsersRouter.put('/users/:id/permissions', async (req, res): Promise<void> =
 // ---------------------------------------------------------------------------
 // PUT /users/:id/lifecycle — activate/deactivate and/or change group membership.
 // ---------------------------------------------------------------------------
-adminUsersRouter.put('/users/:id/lifecycle', async (req, res): Promise<void> => {
+adminUsersRouter.put('/users/:id/lifecycle', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const { active, userGroupIds } = req.body ?? {};
   if (typeof active !== 'boolean' && !Array.isArray(userGroupIds)) {
@@ -387,7 +392,7 @@ adminUsersRouter.put('/users/:id/lifecycle', async (req, res): Promise<void> => 
 // ---------------------------------------------------------------------------
 // POST /users — create a new user.
 // ---------------------------------------------------------------------------
-adminUsersRouter.post('/users', async (req, res): Promise<void> => {
+adminUsersRouter.post('/users', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const { username, name, email, password, userGroupIds } = req.body ?? {};
   if (!username || !password) {
     res.status(400).json({
@@ -429,7 +434,7 @@ adminUsersRouter.post('/users', async (req, res): Promise<void> => {
 // Returns 501 so the UI can show "请到 ITHub 后台重置" instead of failing
 // silently.
 // ---------------------------------------------------------------------------
-adminUsersRouter.post('/users/:id/reset-password', async (req, res): Promise<void> => {
+adminUsersRouter.post('/users/:id/reset-password', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   recordAudit({
     userId: id,
@@ -447,7 +452,7 @@ adminUsersRouter.post('/users/:id/reset-password', async (req, res): Promise<voi
 // ---------------------------------------------------------------------------
 // GET /usage/summary?userId= — aggregated local usage stats.
 // ---------------------------------------------------------------------------
-adminUsersRouter.get('/usage/summary', async (req, res): Promise<void> => {
+adminUsersRouter.get('/usage/summary', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const userId = req.query.userId ? Number(req.query.userId) : undefined;
   const data = usageSummary(userId);
   res.json(data);
@@ -456,7 +461,7 @@ adminUsersRouter.get('/usage/summary', async (req, res): Promise<void> => {
 // ---------------------------------------------------------------------------
 // POST /usage/log — import a single call record (admin/script driven).
 // ---------------------------------------------------------------------------
-adminUsersRouter.post('/usage/log', async (req, res): Promise<void> => {
+adminUsersRouter.post('/usage/log', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const { userId, endpoint, statusCode, latencyMs } = req.body ?? {};
   const uid = Number(userId);
   if (!Number.isFinite(uid) || uid <= 0 || typeof endpoint !== 'string') {
@@ -478,7 +483,7 @@ adminUsersRouter.post('/usage/log', async (req, res): Promise<void> => {
 // ---------------------------------------------------------------------------
 // GET /audit?userId=&limit= — local audit list with degraded marker.
 // ---------------------------------------------------------------------------
-adminUsersRouter.get('/audit', async (req, res): Promise<void> => {
+adminUsersRouter.get('/audit', requireSession, requireAdmin, async (req, res): Promise<void> => {
   const userId = req.query.userId ? Number(req.query.userId) : undefined;
   const limit = req.query.limit ? Number(req.query.limit) : 50;
   const events = listAudit({ userId, limit });
