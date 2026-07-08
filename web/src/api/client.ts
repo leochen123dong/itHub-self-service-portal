@@ -2,11 +2,9 @@
 
 const BASE = (import.meta.env.VITE_API_BASE as string) || '/api';
 
-// Sentinel for "session expired" — fired at most once per minute so a
-// burst of 401s doesn't spam toasts and doesn't fire on auth/login
-// endpoints themselves (those are expected to 401 when the user isn't
-// yet logged in).
-let lastSessionExpiredToast = 0;
+// Module-scoped throttle for the "any-401 toast" event so a transient
+// burst doesn't spam the UI. Not a force-logout — see web/src/components/Layout.tsx.
+let last401ToastAt = 0;
 
 export class ApiError extends Error {
   status: number;
@@ -46,19 +44,24 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const err = body?.error;
-    // Surface session-expiry as a window-level event so the app can show
-    // a single global toast and prompt re-login. Skip auth endpoints
-    // themselves (a 401 from /api/auth/login is expected for wrong creds,
-    // not session expiry).
+    // Surface ANY 401 as a single window-level toast per minute (skipping
+    // /api/auth/*, where 401 just means "wrong credentials"). Layout
+    // subscribes and shows a helpful toast. We deliberately do NOT auto-
+    // logout here — a write-side 401 (e.g. ticket creation denied) is
+    // often an ITHub permission issue, not a session expiry, and
+    // kicking the user back to login would just make things worse.
     if (
       res.status === 401 &&
       !path.startsWith('/auth/') &&
       !path.startsWith('/api/auth/') &&
-      Date.now() - lastSessionExpiredToast > 60_000
+      Date.now() - last401ToastAt > 60_000
     ) {
-      lastSessionExpiredToast = Date.now();
+      last401ToastAt = Date.now();
+      const messageZh = err?.message_zh || `请求失败 (401, ${path})`;
       window.dispatchEvent(
-        new CustomEvent('ithub:session-expired', { detail: { path } }),
+        new CustomEvent('ithub:api-error-401', {
+          detail: { path, message: messageZh, code: err?.code },
+        }),
       );
     }
     if (err?.message_zh) {

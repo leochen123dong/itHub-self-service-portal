@@ -6,23 +6,24 @@ import { adminUsersApi } from '../api/adminUsers';
 import type { ChatMessage, SuggestedAction } from '../types/api';
 
 // Cached after first successful fetch so we don't re-list templates on every
-// escalation. A real tenant usually has 5-50 templates; for the demo this is
-// the only one we care about.
-let cachedTemplateId: number | null = null;
+// escalation. We cache a sorted *list* of candidates (not just the winner)
+// so escalateToTicket can try the next one if the first POST fails — ITHub
+// may reject a specific template (e.g. wrong ticket type for the body, or
+// permission denied) even when the heuristic ranked it highest.
+let cachedTemplateIds: number[] = [];
 
-async function resolveTemplateId(): Promise<number | null> {
-  if (cachedTemplateId !== null) return cachedTemplateId;
-  // First try the admin-configured override. If set, it's authoritative —
-  // this avoids hitting the heuristic at all when the admin has chosen a
-  // template explicitly. If the admin override call fails (network etc.)
-  // we silently fall through to the heuristic below.
+async function resolveTemplateCandidates(): Promise<number[]> {
+  if (cachedTemplateIds.length > 0) return cachedTemplateIds;
+  // First try the admin-configured override. If set, treat it as the single
+  // candidate. Don't fall back to the heuristic for that case — the admin
+  // picked that template explicitly.
   try {
     const r = await adminUsersApi.getDefaultIncidentTemplate();
     const id = r?.templateId;
     if (typeof id === 'number' && id > 0) {
-      cachedTemplateId = id;
+      cachedTemplateIds = [id];
       console.log('[ticket] using admin-configured default template:', id);
-      return cachedTemplateId;
+      return cachedTemplateIds;
     }
   } catch (e) {
     console.warn(
@@ -34,9 +35,8 @@ async function resolveTemplateId(): Promise<number | null> {
     const templates = await catalogApi.list();
     if (!Array.isArray(templates) || templates.length === 0) {
       console.warn('[ticket] catalog returned no templates');
-      return null;
+      return [];
     }
-    // Dump full list to console so misclassifications are visible at a glance.
     console.log(
       '[ticket] catalog templates (first 5):',
       templates.slice(0, 5),
@@ -57,10 +57,8 @@ async function resolveTemplateId(): Promise<number | null> {
     // So we can't filter purely on the list response.
     //
     // Strategy: collect a small candidate pool (incident-named first, then
-    // anything), do detail GETs, pick the first one whose detail has
-    // OwnerUserGroupId set. The Active flag is unreliable in this tenant —
-    // some Active templates have no Owner group and 404 on create, while
-    // some Inactive ones work fine.
+    // anything), do detail GETs, score and rank. Keep top candidates so
+    // escalateToTicket can retry the next-best on POST failure.
     const eligible = templates
       .filter((t) => typeof t?.TicketTemplateId === 'number' && t.TicketTemplateId > 0)
       .slice()
@@ -71,16 +69,16 @@ async function resolveTemplateId(): Promise<number | null> {
       })
       .slice(0, 8); // probe at most 8 to bound latency
 
-    // Score each candidate and pick the best one. A template is usable iff:
-//   1. It has OwnerUserGroupId and AssignedUserGroupId (so the ticket has
-//      an owning group).
-//   2. Its Script reads from input.* (uses our Summary/Description) rather
-//      than hardcoding values for a specific use case. Templates whose
-//      Script instantiates ITHub-only classes (e.g. new TicketCategoryItem())
-//      throw at runtime and 404 the create.
-// Score = +2 per group set, +2 if Script reads input.X, -3 if Script has
-// hardcoded strings (looks for `ticket.X = "..."`), -5 if Script
-// instantiates any `new XxxItem()`.
+    // Score each candidate. A template is usable iff:
+    //   1. It has OwnerUserGroupId and AssignedUserGroupId (so the ticket
+    //      has an owning group).
+    //   2. Its Script reads from input.* (uses our Summary/Description)
+    //      rather than hardcoding values for a specific use case. Templates
+    //      whose Script instantiates ITHub-only classes throw at runtime
+    //      and 404 the create.
+    // Score = +2 per group set, +2 if Script reads input.X, -3 if Script
+    // has hardcoded strings (looks for `ticket.X = "..."`), -5 if Script
+    // instantiates any `new XxxItem()`.
     function scoreTemplate(detail: Record<string, unknown>): number {
       let s = 0;
       if (detail.OwnerUserGroupId != null) s += 2;
@@ -92,7 +90,7 @@ async function resolveTemplateId(): Promise<number | null> {
       return s;
     }
 
-    let best: { id: number; name: string; detail: Record<string, unknown>; score: number } | null = null;
+    const scored: Array<{ id: number; name: string; score: number }> = [];
     for (const cand of eligible) {
       try {
         const detail = (await catalogApi.get(cand.TicketTemplateId)) as unknown as Record<string, unknown>;
@@ -106,23 +104,30 @@ async function resolveTemplateId(): Promise<number | null> {
           String(detail.Script ?? '').slice(0, 80),
         );
         if (score < 0) continue;
-        if (!best || score > best.score) {
-          best = { id: cand.TicketTemplateId, name: cand.Name ?? '', detail, score };
-        }
+        scored.push({ id: cand.TicketTemplateId, name: cand.Name ?? '', score });
       } catch (e) {
         console.warn('[ticket] detail GET failed for', cand.TicketTemplateId, (e as Error)?.message);
       }
     }
-    if (best) {
-      cachedTemplateId = best.id;
-      console.log('[ticket] picked template:', cachedTemplateId, 'name:', best.name, 'score=', best.score);
-      return cachedTemplateId;
+    // Sort descending by score, keep top 5 so escalateToTicket has fallbacks
+    // if the top template's POST is rejected by ITHub.
+    scored.sort((a, b) => b.score - a.score);
+    const top5 = scored.slice(0, 5).map((s) => s.id);
+    if (top5.length > 0) {
+      cachedTemplateIds = top5;
+      console.log(
+        '[ticket] picked top candidates:',
+        top5,
+        'top score=',
+        scored[0]?.score,
+      );
+      return cachedTemplateIds;
     }
     console.warn('[ticket] no usable template found after scoring');
-    return null;
+    return [];
   } catch (e) {
     console.warn('[ticket] catalog.list failed:', (e as Error)?.message);
-    return null;
+    return [];
   }
 }
 
@@ -261,8 +266,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // Resolve which template to use. byCheckPoint may return a pre-filled
       // template ID for the AIChat context; otherwise we fall back to the
-      // best-scored template from the catalog.
-      let templateId: number | undefined;
+      // best-scored template from the catalog. We keep an ordered list of
+      // candidates so the POST loop below can fall through if the first
+      // template is rejected by ITHub (e.g. wrong ticket type for the
+      // body, or transient permission error).
+      const candidates: Array<{ templateId: number; ticketType?: number }> = [];
       let ticketType: number | undefined;
       try {
         const cp = await ticketsApi.byCheckPoint(`AIChat:${chatId}`);
@@ -272,8 +280,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           cp?.TicketRequestItems?.[0] ||
           cp?.TicketProblemItems?.[0];
         if (item) {
-          templateId = item.TicketTemplateId;
-          // Pick the ticketType from which array we matched (0/1/2/3).
+          candidates.push({ templateId: item.TicketTemplateId });
           ticketType =
             cp?.TicketIncidentItems?.[0] === item
               ? 0
@@ -287,16 +294,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         console.warn('[ticket] byCheckPoint failed:', (e as Error)?.message);
       }
 
-      if (templateId === undefined || templateId === 0 || templateId === null) {
-        const id = await resolveTemplateId();
-        if (typeof id === 'number') templateId = id;
+      // Fall back to the ranked heuristic list. We dedupe so the byCheckPoint
+      // pick (if any) always tries first, then the heuristic picks fill in.
+      const ranked = await resolveTemplateCandidates();
+      for (const id of ranked) {
+        if (!candidates.some((c) => c.templateId === id)) {
+          candidates.push({ templateId: id });
+        }
       }
 
-      if (!templateId) {
+      if (candidates.length === 0) {
         console.error('[ticket] no TicketTemplateId available, cannot create');
-        // Tell the user what to do (or the admin) — without a configured
-        // default the heuristic couldn't pick anything usable. The admin
-        // can fix this at /admin/api-users → 设置默认模板.
         throw new Error(
           '未找到可用的工单模板。请联系管理员在「API 使用管理」页设置默认工单模板，或刷新页面后重试。',
         );
@@ -336,32 +344,53 @@ export const useChatStore = create<ChatState>((set, get) => ({
         })
         .join('');
 
-      // Atomic create + journal-sync. Server returns the created ticket plus a
-      // `journalPosted` flag so we can warn the user if the journal write
-      // failed but the ticket still got created.
-      try {
-        const created = await ticketsApi.escalate({
-          templateId,
-          ticketType,
-          summary: finalDesc.slice(0, 200),
-          description: finalDesc,
-          chatTranscript,
-        });
-        const ticketId = created?.TicketId ?? created?.ticketId ?? created?.Id ?? null;
-        if (ticketId) {
-          set({ createdTicketId: ticketId });
-          return {
-            ticketId,
-            journalPosted: created?.journalPosted,
-            journalError: created?.journalError,
-          };
+      // Atomic create + journal-sync. Try each candidate in order — if
+      // ITHub rejects the first template (wrong type, transient perm
+      // error, etc.) we move on instead of failing the whole flow. The
+      // server returns the created ticket plus a `journalPosted` flag so
+      // we can warn if the journal write failed but the ticket was made.
+      let lastError: string | null = null;
+      for (const cand of candidates) {
+        try {
+          const created = await ticketsApi.escalate({
+            templateId: cand.templateId,
+            ticketType: cand.ticketType ?? ticketType,
+            summary: finalDesc.slice(0, 200),
+            description: finalDesc,
+            chatTranscript,
+          });
+          const ticketId = created?.TicketId ?? created?.ticketId ?? created?.Id ?? null;
+          if (ticketId) {
+            if (cand.templateId !== candidates[0].templateId) {
+              console.log(
+                `[ticket] escalate succeeded on fallback template #${cand.templateId} ` +
+                  `(primary #${candidates[0].templateId} failed: ${lastError})`,
+              );
+            }
+            set({ createdTicketId: ticketId });
+            return {
+              ticketId,
+              journalPosted: created?.journalPosted,
+              journalError: created?.journalError,
+            };
+          }
+          console.error('[ticket] escalate returned no id:', created);
+          return null;
+        } catch (e) {
+          lastError = (e as Error)?.message || String(e);
+          console.warn(
+            `[ticket] escalate failed on template #${cand.templateId}, trying next. error=`,
+            lastError,
+          );
+          // Continue to next candidate. 401 from requireSession means the
+          // whole session is dead — no point trying other templates.
+          if (lastError.includes('请先登录')) break;
         }
-        console.error('[ticket] escalate returned no id:', created);
-        return null;
-      } catch (e) {
-        console.error('[ticket] escalate failed:', (e as Error)?.message);
-        return null;
       }
+      console.error('[ticket] escalate failed on all candidates. last error:', lastError);
+      // Surface the actual error rather than a generic "请稍后再试" so the
+      // user knows what went wrong (and can tell the admin).
+      throw new Error(lastError || '所有候选模板都创建失败');
     } finally {
       set({ escalating: false });
     }
