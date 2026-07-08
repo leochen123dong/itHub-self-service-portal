@@ -11,6 +11,7 @@ import { kbRouter } from './routes/kb.js';
 import { catalogRouter } from './routes/catalog.js';
 import { ticketsRouter } from './routes/tickets.js';
 import { adminRouter } from './routes/admin.js';
+import { adminUsersRouter } from './routes/adminUsers.js';
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use('/api/kb', kbRouter);
 app.use('/api/catalog', catalogRouter);
 app.use('/api/tickets', ticketsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/admin-users', adminUsersRouter);
 
 // Final error handler
 app.use((err: any, _req: any, res: any, _next: any) => {

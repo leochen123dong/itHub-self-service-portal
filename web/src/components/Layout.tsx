@@ -38,6 +38,11 @@ export function Layout() {
         <NavLink to="/admin/vip" className={({ isActive }) => `topnav-tab${isActive ? ' active' : ''}`}>
           VIP 设置
         </NavLink>
+        {user?.isAdmin && (
+          <NavLink to="/admin/api-users" className={({ isActive }) => `topnav-tab${isActive ? ' active' : ''}`}>
+            API 使用管理
+          </NavLink>
+        )}
       </div>
       <div className="topnav-user">
         <span className="user-avatar">{initial}</span>
