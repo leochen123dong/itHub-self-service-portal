@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<title>ITHub 自助门户 · AI Vibe Coding 路线图</title>
+<style>
+  :root {
+    --blue: #2563eb;       /* 前端 */
+    --green: #16a34a;      /* 后端 */
+    --orange: #ea580c;     /* ITHub 上游 */
+    --dark: #18181b;       /* GitHub / CI / 部署 */
+    --bg: #ffffff;
+    --bg-soft: #fafafa;
+    --bg-code: #f4f4f5;
+    --border: #e4e4e7;
+    --text: #18181b;
+    --text-mute: #71717a;
+    --text-soft: #52525b;
+    --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, .mono {
+    font-family: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+    font-size: 14px;
+  }
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+  code:not(pre code) {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.92em;
+  }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .toc { position: static !important; max-height: none !important; }
+  }
+
+  /* TOC */
+  .toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 28px 20px 28px 24px;
+    border-right: 1px solid var(--border);
+    background: var(--bg-soft);
+    font-size: 14px;
+  }
+  .toc h4 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-mute);
+  }
+  .toc ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: tocitem;
+  }
+  .toc li {
+    counter-increment: tocitem;
+    margin-bottom: 4px;
+  }
+  .toc a {
+    display: block;
+    padding: 4px 0 4px 24px;
+    color: var(--text-soft);
+    text-decoration: none;
+    position: relative;
+    border-radius: 4px;
+  }
+  .toc a::before {
+    content: counter(tocitem, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    color: var(--text-mute);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .toc a:hover { color: var(--blue); }
+
+  /* Main content */
+  main {
+    padding: 0 48px 96px;
+    max-width: 900px;
+  }
+  @media (max-width: 900px) {
+    main { padding: 0 20px 60px; }
+  }
+
+  /* Hero */
+  .hero {
+    padding: 64px 0 48px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+  .hero .tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--blue);
+    background: rgba(37,99,235,0.08);
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-size: 48px;
+    line-height: 1.15;
+    margin: 0 0 16px;
+    letter-spacing: -0.02em;
+  }
+  .hero p.lead {
+    font-size: 18px;
+    color: var(--text-soft);
+    margin: 0 0 24px;
+  }
+  .hero .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    color: var(--text-mute);
+    font-size: 14px;
+  }
+  .hero .meta span strong { color: var(--text); font-weight: 600; }
+
+  /* Section */
+  section {
+    margin-bottom: 72px;
+    scroll-margin-top: 24px;
+  }
+  section h2 {
+    font-size: 32px;
+    line-height: 1.2;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+  }
+  section h2 .num {
+    color: var(--text-mute);
+    font-size: 0.55em;
+    font-weight: 500;
+    margin-right: 12px;
+    vertical-align: 0.25em;
+  }
+  section h3 {
+    font-size: 22px;
+    margin: 40px 0 12px;
+  }
+  section h4 {
+    font-size: 16px;
+    margin: 28px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-soft);
+  }
+  section p { margin: 12px 0; }
+
+  /* Color tags */
+  .tag-blue   { color: var(--blue);   font-weight: 600; }
+  .tag-green  { color: var(--green);  font-weight: 600; }
+  .tag-orange { color: var(--orange); font-weight: 600; }
+  .tag-dark   { color: var(--dark);   font-weight: 600; }
+
+  /* Stack grid */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+  @media (max-width: 700px) { .stack-grid { grid-template-columns: 1fr; } }
+  .stack-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    background: var(--bg-soft);
+    border-left: 4px solid var(--text-mute);
+  }
+  .stack-card.blue   { border-left-color: var(--blue); }
+  .stack-card.green  { border-left-color: var(--green); }
+  .stack-card.orange { border-left-color: var(--orange); }
+  .stack-card.dark   { border-left-color: var(--dark); }
+  .stack-card h4 {
+    margin: 0 0 8px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 16px;
+    color: var(--text);
+  }
+  .stack-card .pill {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: white;
+    margin-right: 6px;
+    margin-bottom: 4px;
+  }
+  .stack-card.blue   .pill { background: var(--blue); }
+  .stack-card.green  .pill { background: var(--green); }
+  .stack-card.orange .pill { background: var(--orange); }
+  .stack-card.dark   .pill { background: var(--dark); }
+  .stack-card ul { padding-left: 18px; margin: 8px 0 0; }
+  .stack-card li { margin-bottom: 2px; }
+
+  /* Timeline */
+  .timeline {
+    position: relative;
+    margin: 32px 0 32px 4px;
+    padding-left: 28px;
+    border-left: 2px solid var(--border);
+  }
+  .phase {
+    position: relative;
+    padding: 0 0 32px 8px;
+  }
+  .phase:last-child { padding-bottom: 0; }
+  .phase::before {
+    content: '';
+    position: absolute;
+    left: -36px;
+    top: 6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    border: 3px solid var(--text-mute);
+  }
+  .phase.b1::before { border-color: var(--blue); }
+  .phase.b2::before { border-color: var(--green); }
+  .phase.b3::before { border-color: var(--orange); }
+  .phase.b4::before { border-color: var(--dark); }
+  .phase .head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .phase h3 {
+    margin: 0;
+    font-size: 20px;
+  }
+  .phase .stamp {
+    font-size: 12px;
+    color: var(--text-mute);
+    font-family: "SF Mono", monospace;
+  }
+  .phase .summary {
+    color: var(--text-soft);
+    margin: 6px 0 10px;
+  }
+  .phase .commits {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-mute);
+  }
+  .phase .commits li {
+    padding: 2px 0;
+    font-family: "SF Mono", monospace;
+  }
+  .phase .commits .hash {
+    color: var(--blue);
+    margin-right: 8px;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--bg-soft);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+  }
+  tbody tr:nth-child(even) { background: var(--bg-soft); }
+  tbody tr:hover { background: rgba(37,99,235,0.04); }
+  td.mono, th.mono { font-family: "SF Mono", monospace; font-size: 13px; }
+
+  /* Status pills in tables */
+  .pill-sm {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 999px;
+    color: white;
+    background: var(--text-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .pill-sm.live    { background: var(--green); }
+  .pill-sm.probe   { background: var(--orange); }
+  .pill-sm.dead    { background: #71717a; }
+  .pill-sm.warning { background: #d97706; }
+
+  /* Code blocks for probes */
+  .probe-block {
+    background: #1f1f23;
+    color: #fafafa;
+    border-radius: 10px;
+    padding: 16px 20px;
+    font-family: "SF Mono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 12px 0;
+    overflow-x: auto;
+  }
+  .probe-block .ok    { color: #4ade80; }
+  .probe-block .bad   { color: #f87171; }
+  .probe-block .warn  { color: #fbbf24; }
+  .probe-block .com   { color: #71717a; }
+
+  /* Diagram: deployment chain */
+  .chain {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+  .chain .node {
+    flex: 1;
+    min-width: 160px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--bg-soft);
+    text-align: center;
+  }
+  .chain .node .name { font-weight: 600; margin-bottom: 4px; }
+  .chain .node .desc { font-size: 12px; color: var(--text-mute); }
+  .chain .arrow {
+    align-self: center;
+    color: var(--text-mute);
+    padding: 0 8px;
+    font-size: 18px;
+  }
+  .chain .arrow::before { content: '→'; }
+
+  /* Gotcha cards */
+  .gotcha {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin: 12px 0;
+    background: white;
+  }
+  .gotcha .top {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  .gotcha h4 {
+    margin: 0;
+    font-size: 16px;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text);
+  }
+  .gotcha .sev {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .gotcha .sev.crit { background: #dc2626; }
+  .gotcha .sev.high { background: #ea580c; }
+  .gotcha .sev.med  { background: #d97706; }
+  .gotcha .gri {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 4px 12px;
+    margin-top: 8px;
+    font-size: 14px;
+  }
+  .gotcha .gri dt { color: var(--text-mute); font-weight: 500; }
+  .gotcha .gri dd { margin: 0; }
+
+  /* Workflow loop */
+  .loop {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 24px 0;
+  }
+  @media (max-width: 800px) { .loop { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 480px) { .loop { grid-template-columns: 1fr; } }
+  .loop .step {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    background: var(--bg-soft);
+    position: relative;
+  }
+  .loop .step .n {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--blue);
+    letter-spacing: 0.08em;
+  }
+  .loop .step h4 {
+    margin: 4px 0 6px;
+    font-size: 15px;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text);
+  }
+  .loop .step p { margin: 0; font-size: 13px; color: var(--text-soft); }
+
+  /* Scenarios */
+  .scenario {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin: 12px 0;
+    background: white;
+  }
+  .scenario h4 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text);
+  }
+  .scenario .ex {
+    background: var(--bg-code);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0;
+    font-size: 13px;
+    color: var(--text-soft);
+  }
+
+  /* Footer */
+  footer {
+    margin-top: 96px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-mute);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="toc">
+    <h4>目录</h4>
+    <ol>
+      <li><a href="#sec0">TL;DR</a></li>
+      <li><a href="#sec1">技术栈</a></li>
+      <li><a href="#sec2">开发时间线</a></li>
+      <li><a href="#sec3">ITHub API 全景</a></li>
+      <li><a href="#sec4">API 获取方法论</a></li>
+      <li><a href="#sec5">安全模型：代理模式</a></li>
+      <li><a href="#sec6">第三方组件</a></li>
+      <li><a href="#sec7">部署拓扑</a></li>
+      <li><a href="#sec8">踩坑清单</a></li>
+      <li><a href="#sec9">AI Vibe Coding 工作流</a></li>
+      <li><a href="#sec10">展望</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <!-- HERO -->
+    <div class="hero">
+      <span class="tag">AI Vibe Coding · 实战案例</span>
+      <h1>ITHub 自助服务门户</h1>
+      <p class="lead">一个面向终端用户的 IT 自助 Demo —— 登录、对 AI 助手说话、按一下"转人工"就生成工单，ITHub admin 后台可以全程追踪。从立项到上线 4 天，97 次提交，全程由 Claude Code 协作完成。</p>
+      <div class="meta">
+        <span>📅 <strong>2026-06-27 → 2026-06-30</strong></span>
+        <span>📦 <strong>97</strong> 次提交</span>
+        <span>🧑‍💻 <strong>Vite + React + Express</strong></span>
+        <span>🌐 <strong>GH Pages + Render</strong></span>
+        <span>🔗 <a href="https://leochen123dong.github.io/itHub-self-service-portal/" target="_blank">线上 Demo</a></span>
+      </div>
+    </div>
+
+    <!-- 0. TL;DR -->
+    <section id="sec0">
+      <h2><span class="num">00</span>TL;DR</h2>
+      <p>终端用户（员工）打开这个 Portal，可以：</p>
+      <ol>
+        <li>用 ITHub 账号登录；</li>
+        <li>和一个接入了公司知识库的 AI 助手对话（基于 RAG：先在 KB 里搜相关文章塞进 prompt）；</li>
+        <li>对话解决不了就点"转人工"——MiniMax 把整段对话压成一句话描述，自动建工单 + 同步完整聊天记录到 ITHub Journals；</li>
+        <li>在"我的工单"看进度、查时间线、加备注；</li>
+        <li>工单关单后还能"总结为 KB 草稿"，让 AI 帮写好让人 review 再发布到 ITHub KB。</li>
+      </ol>
+      <p>Demo 跑在 <strong>GitHub Pages</strong>（静态前端）+ <strong>Render</strong>（Express 后端代理），后端是 <strong>唯一</strong> 持有 ITHub AccessToken 的进程 —— 浏览器从头到尾摸不到真实凭证。</p>
+    </section>
+
+    <!-- 1. 技术栈 -->
+    <section id="sec1">
+      <h2><span class="num">01</span>技术栈全景</h2>
+      <div class="stack-grid">
+        <div class="stack-card blue">
+          <h4>前端 <span class="tag-blue">web/</span></h4>
+          <div>
+            <span class="pill">Vite 5</span>
+            <span class="pill">React 18</span>
+            <span class="pill">TypeScript</span>
+            <span class="pill">Zustand</span>
+          </div>
+          <ul>
+            <li><strong>HashRouter</strong> —— GH Pages 静态托管没有 SPA rewrite</li>
+            <li><strong>手写组件</strong>，不引 Ant Design / MUI（包大小 + 风格统一）</li>
+            <li><strong>Markdown</strong> 用自写 ~30 行渲染器</li>
+            <li><strong>3 个 zustand store</strong>：auth / chat / ui</li>
+          </ul>
+        </div>
+
+        <div class="stack-card green">
+          <h4>后端 <span class="tag-green">server/</span></h4>
+          <div>
+            <span class="pill">Express 4</span>
+            <span class="pill">TypeScript</span>
+            <span class="pill">Node 20</span>
+            <span class="pill">原生 fetch</span>
+          </div>
+          <ul>
+            <li><strong>8 个路由文件</strong>：auth / ai / kb / catalog / tickets / health / debug</li>
+            <li><strong>ithHub 客户端</strong>：注入 token + customerTag + 20s 超时 + 1 次重试</li>
+            <li><strong>Session 存内存</strong> Map&lt;sid, data&gt;，8h 过期 + 5min 清理</li>
+            <li><strong>AI 子模块</strong>：minimax / chatStore / kbContext / kbUsageStore / kbVersionStore / ratingStore</li>
+          </ul>
+        </div>
+
+        <div class="stack-card orange">
+          <h4>上游 <span class="tag-orange">ITHub REST</span></h4>
+          <div>
+            <span class="pill">demo.logicalisservice.com/api</span>
+            <span class="pill">CustomerTag: ciscoinnovation1</span>
+          </div>
+          <ul>
+            <li><strong>0 公开 API 文档</strong> —— 端点全靠探针摸索</li>
+            <li>认证：<code>POST /Security/AccessTokens</code> 拿 token</li>
+            <li>AI：<code>InitiateAIChat</code> + <code>AIChats/UserMessage</code></li>
+            <li>KB：<code>KnowledgeArticles</code>（PUT 是全 SQL UPDATE，不是 PATCH）</li>
+            <li>工单：<code>/Nms/Tickets</code>（注意：<code>/ServiceDesk/Tickets</code> 404）</li>
+          </ul>
+        </div>
+
+        <div class="stack-card dark">
+          <h4>部署 <span class="tag-dark">CI / CD</span></h4>
+          <div>
+            <span class="pill">GitHub Pages</span>
+            <span class="pill">Render</span>
+            <span class="pill">GitHub Actions</span>
+          </div>
+          <ul>
+            <li><strong>前端</strong>：push main → Actions → <code>vite build</code> → <code>actions/deploy-pages@v4</code></li>
+            <li><strong>后端</strong>：Render Blueprint（<code>render.yaml</code>），需 Dashboard <strong>手动 Manual Deploy</strong></li>
+            <li><strong>Secrets</strong>：只一个 <code>VITE_API_BASE</code>（以 <code>/api</code> 结尾无尾斜杠）</li>
+            <li><strong>CORS</strong>：逗号分隔多 origin，跨站部署自动 <code>SameSite=None; Secure</code></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 时间线 -->
+    <section id="sec2">
+      <h2><span class="num">02</span>开发时间线（4 天 / 97 提交）</h2>
+      <p>按时间顺序的 9 个阶段。带 <code>debug:</code> 前缀的 commit 是临时探针，最终都清理掉了。</p>
+
+      <div class="timeline">
+        <div class="phase b1">
+          <div class="head">
+            <h3>① 立项 & 脚手架</h3>
+            <span class="stamp">2026-06-27 上午 · 1 commit</span>
+          </div>
+          <p class="summary">一天之内把空目录填成可启动的 Vite + Express 双进程项目，Vite dev proxy 配好，<code>render.yaml</code> 写好。</p>
+          <ul class="commits">
+            <li><span class="hash">c99c786</span> Initial commit: ITHub self-service portal demo</li>
+          </ul>
+        </div>
+
+        <div class="phase b1">
+          <div class="head">
+            <h3>② 部署 & CORS 踩坑</h3>
+            <span class="stamp">2026-06-27 上午 · 4 commits</span>
+          </div>
+          <p class="summary">推上 GH Pages 后发现跨站 session cookie 没生效 —— 因为默认 <code>SameSite=Lax</code>，跨站要 <code>None; Secure</code>。加 <code>hasExternalOrigin</code> 判定逻辑 + 调试路由验证 header。</p>
+          <ul class="commits">
+            <li><span class="hash">1f652cb</span> docs: add preview section to README with page mockups</li>
+            <li><span class="hash">55b8d9f</span> deploy: GitHub Pages + Render blueprint</li>
+            <li><span class="hash">2b87f9d</span> fix(server): use SameSite=None; Secure for cross-site cookies</li>
+            <li><span class="hash">d6acf33</span> fix(server): return 403 instead of 500 for rejected CORS</li>
+          </ul>
+        </div>
+
+        <div class="phase b2">
+          <div class="head">
+            <h3>③ AI 聊天（直连 MiniMax）</h3>
+            <span class="stamp">2026-06-27 下午 · 4 commits</span>
+          </div>
+          <p class="summary">最初尝试 ITHub 自带的 <code>AI Profiles</code>，发现延迟和质量都不行，<strong>一天内</strong>改用直接调 MiniMax（Anthropic API 协议），把整套 chat 路由重写。</p>
+          <ul class="commits">
+            <li><span class="hash">3811dd0</span> feat(server): AI chat now uses MiniMax directly, not ITHub AI Profiles</li>
+            <li><span class="hash">5d0e8b5</span> feat(web): embed AI chat directly on home page</li>
+            <li><span class="hash">8e06468</span> debug(minimax): log raw response when content is empty</li>
+            <li><span class="hash">f4eb636</span> fix(server): handle undefined raw responses in KB and MiniMax wrappers</li>
+          </ul>
+        </div>
+
+        <div class="phase b2">
+          <div class="head">
+            <h3>④ KB RAG（最长的一条链路）</h3>
+            <span class="stamp">2026-06-27 下午~晚 · 16 commits</span>
+          </div>
+          <p class="summary">把 KB 注入到 AI prompt 里。先用 ITHub 自带的 <code>EmbeddingSearch</code>，不行就降级到关键词搜索（CJK bigram 分词）。先要解决"分页 10 篇硬截断"——得换顶层 endpoint 才看得到全部 21 篇。</p>
+          <ul class="commits">
+            <li><span class="hash">af1a82e</span> feat(server): ground AI replies in ITHub KB via RAG</li>
+            <li><span class="hash">443ed65</span> feat(server): KB RAG with EmbeddingSearch + keyword fallback</li>
+            <li><span class="hash">fa51d4d</span> fix(kb): CJK bigram tokenization (was: greedy [一-龥]+ matched whole string)</li>
+            <li><span class="hash">3354b96</span> fix(kb): use top-level /KnowledgeArticles?KnowledgeBaseId to bypass 10-cap</li>
+            <li><span class="hash">6c01833</span> fix(kb): cap injected context length to stay within MiniMax window</li>
+            <li><span class="hash">014b503</span> fix(kb): hard prompt rules against hallucination + log injected context</li>
+          </ul>
+        </div>
+
+        <div class="phase b2">
+          <div class="head">
+            <h3>⑤ 工单系统（最曲折的探针阶段）</h3>
+            <span class="stamp">2026-06-27 晚 · 17 commits</span>
+          </div>
+          <p class="summary">这是和 ITHub API 搏斗最久的一段。模板选择、ACL 字段、payload 形状全是试出来的。最后用评分函数挑最合适的 TicketTemplate：避免 hardcode Script 的，按名字优先 Incident 类型，10+ 个候选 → 选 1 个。</p>
+          <ul class="commits">
+            <li><span class="hash">27b4e8d</span> debug(ticket): add _probe endpoint to test 6 paths × 3 payload shapes</li>
+            <li><span class="hash">846cd88</span> fix(ticket): use real ITHub create path with tenant ApiKey</li>
+            <li><span class="hash">b2c9033</span> fix(ticket): use customer-scoped path + ApiKey for list endpoint</li>
+            <li><span class="hash">ace8cda</span> fix(ticket): add journals endpoint that auto-transitions out of Registered</li>
+            <li><span class="hash">eec97bc</span> fix(ticket): pick Incident-type Active template for escalation</li>
+            <li><span class="hash">f770224</span> fix(ticket): score templates and skip ones with hardcoded Script</li>
+            <li><span class="hash">7ebf769</span> fix(ticket): detail/log endpoints with ApiKey to get assignee</li>
+          </ul>
+        </div>
+
+        <div class="phase b3">
+          <div class="head">
+            <h3>⑥ "转人工"：AI 摘要 + 一键升级</h3>
+            <span class="stamp">2026-06-27 晚 → 06-28 · 7 commits</span>
+          </div>
+          <p class="summary">把上面 ③④⑤ 串成完整闭环。AI 摘要失败时降级用最后 6 条拼接；chatTranscript 走 Journals 是单独的原子操作（创建工单后），失败不打断主流程。</p>
+          <ul class="commits">
+            <li><span class="hash">a400bcd</span> 升级工单同步聊天记录 + AI 总结工单更新 KB</li>
+            <li><span class="hash">3f780fd</span> 评分统计增加 KB 引用排行 + 从未引用的 KB</li>
+            <li><span class="hash">b413048</span> feat(ai): per-message 👍/👎 rating + admin stats dashboard</li>
+            <li><span class="hash">a85fa84</span> refactor(admin): embed stats widget in ChatPage, drop /admin route</li>
+            <li><span class="hash">cf352d8</span> 升级工单时由 MiniMax 精简对话写入 Description</li>
+          </ul>
+        </div>
+
+        <div class="phase b3">
+          <div class="head">
+            <h3>⑦ KB 发布（最长单点探针战役）</h3>
+            <span class="stamp">2026-06-28 → 06-29 · 22 commits</span>
+          </div>
+          <p class="summary">22 次提交中至少 12 次是 <code>fillProbeV1..V5</code> 临时探针。最终结论：<strong>必须</strong>走 2 步：POST 创建草稿 → PUT 填内容，PUT 路径必须在顶层 <code>/KnowledgeArticles/{id}</code>，body 字段是 <code>Description</code> 不是 <code>DescriptionText</code>，ITHub PUT 是全 SQL UPDATE 不是 PATCH。</p>
+          <ul class="commits">
+            <li><span class="hash">5b33d9c</span> /kb/publish 改 2-step：POST 创建草稿 + PUT 填内容</li>
+            <li><span class="hash">1856941</span> /kb/publish PUT 改 top-level 路径</li>
+            <li><span class="hash">e7cc10c</span> fillProbeV5 修 Content-Type bug + 专攻 Description 字段</li>
+            <li><span class="hash">e6c1cac</span> KB: PUT 字段 DescriptionText→Description + 加 kbRepair 修复空文章</li>
+            <li><span class="hash">29766fe</span> KB publish 默认状态改 Draft：status 1→0</li>
+            <li><span class="hash">7a0f041</span> KB publish 文档注释：明确字段名 Description + 两个 GOTCHA</li>
+            <li><span class="hash">18e14a1</span> 清理 _debug/ithub-kb-publish：删除 5 个 fillProbe 探针 + 临时 helper</li>
+          </ul>
+        </div>
+
+        <div class="phase b4">
+          <div class="head">
+            <h3>⑧ UI 打磨 / 解码 / 防御性渲染</h3>
+            <span class="stamp">2026-06-29 · 7 commits</span>
+          </div>
+          <p class="summary">给 KB 文章加版本信息 UI；解决 ITHub 返回的 hex 实体（<code>&amp;#x67E5;</code>）双重编码；解决 React error #31（ITHub 把 <code>KnowledgeCategoryName</code> 当成 rich object 返回）。</p>
+          <ul class="commits">
+            <li><span class="hash">4a643e2</span> KB 版本信息：Drawer 底部显示创建/更新时间 + 作者 + 状态 + 分类</li>
+            <li><span class="hash">3e3bed7</span> KB 解码 + 版本信息置顶 + Drawer 标题用 Summary</li>
+            <li><span class="hash">6bce7d7</span> KB Page 防御性字符串化：safeStr 处理 ITHub 返回的对象字段</li>
+            <li><span class="hash">4787a08</span> 修复 stripHtml 漏掉十六进制字符实体</li>
+            <li><span class="hash">8d7afc7</span> TicketTimeline 适配 ITHub 真实 journals 字段</li>
+            <li><span class="hash">f1e135d</span> feat(ticket): poll detail every 20s and surface assignee color/online</li>
+            <li><span class="hash">dd770c6</span> 处理人字段对齐 ITHub PascalCase</li>
+          </ul>
+        </div>
+
+        <div class="phase b4">
+          <div class="head">
+            <h3>⑨ 版本追踪 / 缓存刷新（最近）</h3>
+            <span class="stamp">2026-06-30 · 13 commits</span>
+          </div>
+          <p class="summary">让 KB 版本号也能反映 admin 后台改动（比较 ModifiedUtc）；修状态枚举注释（1=Published 不是 Pending）；给前端加 BUILD_STAMP + no-cache meta 解决 GH Pages 缓存吃旧 bundle 的问题。</p>
+          <ul class="commits">
+            <li><span class="hash">9246332</span> KB 版本计数器：每次 publish/repair PUT 自增 + Drawer/列表显示</li>
+            <li><span class="hash">b6c4875</span> feat(kb): 抽屉加手动刷新，列表加刷新按钮 + GET 默认不缓存</li>
+            <li><span class="hash">b486b03</span> chore(web): BUILD_STAMP 强制 Vite 输出新 hash</li>
+            <li><span class="hash">86ed31a</span> chore(web): BUILD_STAMP 现在输出到 console，让 Vite 保留常量</li>
+            <li><span class="hash">dfb30df</span> fix(kb): 修正 KnowledgeArticleStatus 中文标签映射</li>
+            <li><span class="hash">e12ee40</span> feat(kb): 版本计数器现在也会跟踪 ITHub admin 改动</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. ITHub API -->
+    <section id="sec3">
+      <h2><span class="num">03</span>ITHub API 全景</h2>
+      <p>实际调过的所有端点。<span class="pill-sm live">在用</span> = 当前生产代码仍然调；<span class="pill-sm probe">探针</span> = 当时试过但已删除；<span class="pill-sm warning">坑</span> = 在用且踩过坑。</p>
+
+      <h3>Security / 认证</h3>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>用途</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">POST</td><td class="mono">/api/Security/AccessTokens</td><td>登录拿 AccessToken，存进 session</td><td><span class="pill-sm live">在用</span></td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/Security/AccessTokens/{token}</td><td>验证 token 有效性（session 恢复）</td><td><span class="pill-sm live">在用</span></td></tr>
+          <tr><td class="mono">DELETE</td><td class="mono">/api/Security/AccessTokens/{token}</td><td>登出</td><td><span class="pill-sm live">在用</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>KB / 知识库</h3>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>用途</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">GET</td><td class="mono">/api/Knowledge/KnowledgeArticles?KnowledgeBaseId=…</td><td>列表（绕过 10 篇硬截断必须顶层）</td><td><span class="pill-sm warning">在用 · 坑</span></td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/Knowledge/KnowledgeArticles/{id}</td><td>单篇详情（含 ModifiedUtc）</td><td><span class="pill-sm live">在用</span></td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/Knowledge/KnowledgeArticles</td><td>创建草稿（kb/publish Step 1）</td><td><span class="pill-sm live">在用</span></td></tr>
+          <tr><td class="mono">PUT</td><td class="mono">/api/Knowledge/KnowledgeArticles/{id}</td><td>填内容（kb/publish Step 2）<br>⚠️ 全 SQL UPDATE，body 字段是 <code>Description</code></td><td><span class="pill-sm warning">在用 · 大坑</span></td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/Knowledge/KnowledgeBases/{kbId}/KnowledgeArticles</td><td>嵌套路径（<strong>10 篇硬截断</strong>，已弃用）</td><td><span class="pill-sm dead">弃用</span></td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/Knowledge/KnowledgeBases/{kbId}/EmbeddingSearch</td><td>语义搜索（用作 RAG 检索）</td><td><span class="pill-sm live">在用</span></td></tr>
+          <tr><td class="mono">PATCH</td><td class="mono">/api/Knowledge/KnowledgeArticles/{id}</td><td>局部更新（ITHub 不支持，统一 405）</td><td><span class="pill-sm probe">探针</span></td></tr>
+          <tr><td class="mono">PUT</td><td class="mono">/api/Knowledge/KnowledgeBases/{kbId}/KnowledgeArticles/{id}</td><td>嵌套 PUT（永远 404）</td><td><span class="pill-sm probe">探针</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>AI / MiniMax</h3>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>用途</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">POST</td><td class="mono">/api/AI/AIProfiles/{id}/InitiateAIChat</td><td>ITHub 自带 AI（已弃用，改直连 MiniMax）</td><td><span class="pill-sm dead">弃用</span></td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/AI/AIChats/UserMessage</td><td>发消息（已弃用，MiniMax 直连替代）</td><td><span class="pill-sm dead">弃用</span></td></tr>
+          <tr><td class="mono">POST</td><td class="mono">https://api.minimaxi.com/v1/text/chatcompletion_v2</td><td>MiniMax 直连（Anthropic Messages 协议）</td><td><span class="pill-sm live">在用</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Tickets / ServiceDesk</h3>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>用途</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">GET</td><td class="mono">/api/ServiceDesk/Tickets</td><td>裸路径（永远 404）</td><td><span class="pill-sm probe">探针</span></td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/Nms/Tickets?$expand=…</td><td>列表（白名单 expand/select，限 200 字符）</td><td><span class="pill-sm warning">在用 · 坑</span></td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/Nms/Tickets/{id}?$expand=…</td><td>详情（同上白名单）</td><td><span class="pill-sm live">在用</span></td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/ServiceDesk/Customers/{tag}/TicketTemplates/{tid}/TicketIncidents</td><td>创建工单（必须 customer-scoped + ApiKey）</td><td><span class="pill-sm warning">在用 · 坑</span></td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/Nms/Tickets/{id}/TicketJournals</td><td>追加备注（自动 0→1 状态转换）</td><td><span class="pill-sm live">在用</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Catalog / 服务目录</h3>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>用途</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">GET</td><td class="mono">/api/ServiceDesk/Customers/{tag}/TicketTemplates</td><td>模板列表（升级工单时按分数挑 1 个）</td><td><span class="pill-sm live">在用</span></td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/ServiceDesk/TicketTemplates/{id}</td><td>模板详情（拿到 Script / OwnerUserGroupId 用于评分）</td><td><span class="pill-sm live">在用</span></td></tr>
+        </tbody>
+      </table>
+
+      <h3>已删除的探针（<code>_debug/</code> 目录，<code>18e14a1</code> commit 一并清理）</h3>
+      <table>
+        <thead><tr><th>尝试</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td>6 paths × 3 payload shapes（工单创建）</td><td>锁定 <code>/api/ServiceDesk/Customers/.../TicketIncidents</code> + ApiKey + AccessToken</td></tr>
+          <tr><td>5 个 attempt 复制 K100003 完整字段</td><td>摸清 NOT NULL 字段集（Description 不是 DescriptionText）</td></tr>
+          <tr><td><code>listProbe</code> / <code>fillProbeV1..V5</code></td><td>PUT 路径只能是顶层，PATCH 全 405，nested PUT 全 404</td></tr>
+          <tr><td><code>/api/Knowledge/KnowledgeBases/{kbId}/KnowledgeArticles?$top=100</code></td><td>无视 <code>$top</code>，永远 10 篇</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 4. API 获取方法论 -->
+    <section id="sec4">
+      <h2><span class="num">04</span>API 获取方法论（重点章节）</h2>
+      <p>这个项目最值钱的部分 —— <strong>没有任何公开 API 文档</strong>。ITHub 不像 GitHub/Stripe 有 OpenAPI，全靠探针摸索。把方法论沉淀成 4 步：</p>
+
+      <h3>Step 1 · 列出端点猜测</h3>
+      <p>从 UI 操作倒推：用户能看到 KB 文章 → 至少要 <code>GET /api/Knowledge/KnowledgeArticles</code>；用户能改状态 → 至少要 <code>PUT /api/Knowledge/KnowledgeArticles/{id}</code>。把这些猜的端点写到一个清单。</p>
+
+      <h3>Step 2 · 写探针路由，把每个猜测打一遍</h3>
+      <p>在 <code>server/src/routes/_debug/ithub-kb-publish.ts</code> 里写了独立的 <code>POST /_debug/ithub-kb-publish/listProbe</code>、<code>putProbe</code>、<code>fillProbeV1..V5</code>。每个探针只做一件事：打一个端点，把响应原样 dump 出来。</p>
+
+      <div class="probe-block">
+<span class="com">// 探针示例：fillProbeV5（Content-Type 修好之后的版本）</span>
+<span class="ok">POST</span> /api/Knowledge/KnowledgeArticles/<span class="warn">{id}</span>
+Content-Type: application/json
+AccessToken: eyJ...
+CustomerTag: ciscoinnovation1
+
+{
+  "Identifier": "K100103",
+  "CustomerId": 3,
+  "CustomerTag": "ciscoinnovation1",
+  "KnowledgeBaseId": 1,
+  "ParentKnowledgeCategoryId": 4,
+  "KnowledgeCategoryId": 5,
+  "KnowledgeCategoryName": "Hardware",
+  "Summary": "…",
+  <span class="bad">"DescriptionText": "…"</span>      <span class="com">← ❌ 被静默丢弃！</span>
+  <span class="ok">"Description": "…"</span>           <span class="com">← ✅ 实际生效的字段</span>
+  "KnowledgeArticleStatus": 0,
+  "Active": true,
+  "AccessFlags": 2147483647,
+  "KnowledgeArticleAccessFlags": 2147483647,
+  "KnowledgeArticleServiceDeskAccessFlags": 2147483647
+}
+
+<span class="ok">← 200</span> Body: <span class="ok">true</span>      <span class="com">// ITHub 不返回对象，只返 true</span>
+      </div>
+
+      <h3>Step 3 · 沉淀状态码矩阵</h3>
+      <p>把每次探针的 HTTP 状态码记到一个表里。命中率最高的发现：</p>
+      <table>
+        <thead><tr><th>状态码</th><th>触发条件</th><th>我们的处理</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">200 / 204</td><td>成功（PUT 的成功 body 是 <code>true</code>）</td><td>正常</td></tr>
+          <tr><td class="mono">400</td><td>缺 NOT NULL 字段 / 字段类型错</td><td>补字段，重试</td></tr>
+          <tr><td class="mono">401</td><td>AccessToken 过期 / CustomerTag 不匹配</td><td>重新登录</td></tr>
+          <tr><td class="mono">404</td><td>路径错（ITHub 有"必须在顶层"的奇怪规矩）</td><td>改路径</td></tr>
+          <tr><td class="mono">405</td><td>用了 PATCH / DELETE（PUT 是唯一能改的动词）</td><td>改用 PUT 全量覆盖</td></tr>
+          <tr><td class="mono">415</td><td>Content-Type 错（很多老 endpoint 期望 form 不是 json）</td><td>改 Content-Type 重试</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Step 4 · 探针沉淀成生产代码</h3>
+      <p>当一个探针跑出 200，就把它的逻辑搬到正式路由里。探针本身删掉（commit <code>18e14a1</code> 一次性清理 5 个 fillProbe + 临时 helper）。</p>
+
+      <h4>这个方法论学到的 3 件事</h4>
+      <ol>
+        <li><strong>ITHub 写操作没有 PATCH</strong> —— 凡是更新都是 PUT 全量。代码里要 "读最新 → 改一两个字段 → 整体 PUT 回去"，不能假设 PATCH 会合并。</li>
+        <li><strong>字段名靠注释和探针双确认</strong> —— 我有两次猜错字段名（<code>DescriptionText</code> → <code>Description</code>、<code>Pending</code> → <code>Published</code>）。TypeScript 类型 + 探针响应双验，是最稳的。</li>
+        <li><strong>读副本延迟是真的</strong> —— admin 后台改了状态，立刻 GET 拿到旧值（<code>ModifiedUtc</code> 还是 5 秒前的）。所有写后读都等 2-3 秒，必要时多次重试。</li>
+      </ol>
+    </section>
+
+    <!-- 5. 安全模型 -->
+    <section id="sec5">
+      <h2><span class="num">05</span>安全模型：代理模式</h2>
+      <p>整个项目的安全核心就一句话：<strong>浏览器永远摸不到 AccessToken</strong>。</p>
+
+      <h3>为什么必须代理</h3>
+      <p>如果前端直接打 ITHub：</p>
+      <ul>
+        <li>AccessToken 必然进 JS bundle，任何人 DevTools 能直接复制</li>
+        <li>CustomerTag / ApiKey 同理</li>
+        <li>CORS 要在 ITHub 上配白名单，跨域 cookie 又是一堆 <code>SameSite</code> 的坑</li>
+      </ul>
+      <p>代理模式把这些凭证全部锁在服务端，浏览器只认 HttpOnly cookie。</p>
+
+      <h3>请求流（登录一次，后续都是这样）</h3>
+      <div class="chain">
+        <div class="node">
+          <div class="name">浏览器</div>
+          <div class="desc">fetch <code>/api/chat/init</code> 带 cookie: sid=…</div>
+        </div>
+        <div class="arrow"></div>
+        <div class="node" style="border-left:4px solid var(--green)">
+          <div class="name">Render (Express)</div>
+          <div class="desc">requireSession 拿 sid → 查内存 session → 拿到 AccessToken</div>
+        </div>
+        <div class="arrow"></div>
+        <div class="node" style="border-left:4px solid var(--orange)">
+          <div class="name">ITHub 上游</div>
+          <div class="desc">注入 <code>AccessToken</code> + <code>CustomerTag</code> + 20s 超时</div>
+        </div>
+      </div>
+
+      <h3>登录那一刻</h3>
+      <div class="chain">
+        <div class="node">
+          <div class="name">浏览器</div>
+          <div class="desc">POST /api/auth/login { identity, password }</div>
+        </div>
+        <div class="arrow"></div>
+        <div class="node" style="border-left:4px solid var(--green)">
+          <div class="name">Render</div>
+          <div class="desc">调 <code>POST /api/Security/AccessTokens</code> 拿 token<br>生成 sid，存 <code>Map&lt;sid, {accessToken, customerTag, ...}&gt;</code><br>Set-Cookie: sid=…; HttpOnly; SameSite=None; Secure</div>
+        </div>
+        <div class="arrow"></div>
+        <div class="node" style="border-left:4px solid var(--orange)">
+          <div class="name">ITHub</div>
+          <div class="desc">返回 AccessToken 字符串</div>
+        </div>
+      </div>
+
+      <h3>代码层</h3>
+      <ul>
+        <li><code>server/src/session/middleware.ts</code> — <code>requireSession</code> 守卫所有业务路由（除了 <code>/api/auth/login</code>、<code>/api/health</code>）</li>
+        <li><code>server/src/http/ithubClient.ts</code> — 唯一接触 ITHub 上游的地方。新端点只能在这里或它的调用方出现</li>
+        <li>Session 默认 8h 过期，每 5min 清理一次过期项</li>
+        <li>跨站部署（GH Pages → Render）强制 <code>SameSite=None; Secure</code>（<code>hasExternalOrigin</code> 判定）</li>
+      </ul>
+    </section>
+
+    <!-- 6. 第三方组件 -->
+    <section id="sec6">
+      <h2><span class="num">06</span>第三方组件清单</h2>
+      <p>分成 4 类：上游 API / 部署平台 / AI 模型 / 工具链。</p>
+
+      <h3>上游 API</h3>
+      <table>
+        <thead><tr><th>组件</th><th>用它干什么</th><th>怎么接入</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>ITHub REST</strong><br><code>demo.logicalisservice.com/api</code></td>
+            <td>数据源：KB / 工单 / 用户 / AI Profile</td>
+            <td><code>server/.env</code>：<code>ITHUB_API_KEY</code>、<code>ITHUB_CUSTOMER_TAG=ciscoinnovation1</code></td>
+          </tr>
+          <tr>
+            <td><strong>MiniMax</strong><br><code>api.minimaxi.com</code></td>
+            <td>AI 模型：对话生成 + 工单摘要 + KB 草稿</td>
+            <td><code>server/.env</code>：<code>MINIMAX_API_KEY</code>，<code>server/src/ai/minimax.ts</code> 包装 20s 超时 + 1 次重试</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>部署平台</h3>
+      <table>
+        <thead><tr><th>组件</th><th>用它干什么</th><th>怎么接入</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>GitHub Pages</strong></td>
+            <td>静态前端托管（<code>web/dist/</code>）</td>
+            <td><code>.github/workflows/deploy-web.yml</code>：push main → <code>vite build</code> → <code>actions/deploy-pages@v4</code></td>
+          </tr>
+          <tr>
+            <td><strong>Render</strong></td>
+            <td>Express 后端长跑进程</td>
+            <td><code>render.yaml</code> Blueprint：service name <code>ithub-portal-server</code>，健康检查 <code>/api/health</code></td>
+          </tr>
+          <tr>
+            <td><strong>GitHub Actions</strong></td>
+            <td>CI：自动跑 lint / build / deploy</td>
+            <td>Node 22，<code>actions/setup-node@v4</code> cache <code>web/package-lock.json</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>AI 模型</h3>
+      <table>
+        <thead><tr><th>模型</th><th>用途</th><th>调用点</th></tr></thead>
+        <tbody>
+          <tr><td><strong>MiniMax-M3</strong></td><td>对话生成（KB RAG 后的回复）</td><td><code>POST /api/ai/chat/message</code></td></tr>
+          <tr><td><strong>MiniMax-M3</strong></td><td>对话 → 工单描述（≤80 字）</td><td><code>POST /api/ai/chat/summarize</code></td></tr>
+          <tr><td><strong>MiniMax-M3</strong></td><td>工单 → KB 草稿（含标题/正文/分类）</td><td><code>POST /api/ai/tickets/:id/kb-draft</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>工具链</h3>
+      <table>
+        <thead><tr><th>工具</th><th>用途</th><th>配置位置</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Vite 5</strong></td><td>前端构建 + dev server（带 <code>/api</code> 代理）</td><td><code>web/vite.config.ts</code></td></tr>
+          <tr><td><strong>React 18</strong></td><td>UI 框架</td><td><code>web/src/main.tsx</code></td></tr>
+          <tr><td><strong>Zustand</strong></td><td>3 个全局 store（auth / chat / ui）</td><td><code>web/src/store/</code></td></tr>
+          <tr><td><strong>TypeScript</strong></td><td>前后端都开 strict</td><td><code>tsconfig.json</code>（前后端各一）</td></tr>
+          <tr><td><strong>concurrently</strong></td><td>本地一进程跑前后端</td><td><code>npm run dev</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 7. 部署拓扑 -->
+    <section id="sec7">
+      <h2><span class="num">07</span>部署拓扑</h2>
+      <p>4 层链路，每层一个职责，互不耦合。</p>
+
+      <div class="chain">
+        <div class="node" style="border-left:4px solid var(--blue)">
+          <div class="name">浏览器</div>
+          <div class="desc">用户视角</div>
+        </div>
+        <div class="arrow"></div>
+        <div class="node" style="border-left:4px solid var(--dark)">
+          <div class="name">GitHub Pages</div>
+          <div class="desc">静态 web/dist/<br>HashRouter + 404.html</div>
+        </div>
+        <div class="arrow"></div>
+        <div class="node" style="border-left:4px solid var(--green)">
+          <div class="name">Render (Express)</div>
+          <div class="desc">唯一持 token 进程<br>Manual Deploy</div>
+        </div>
+        <div class="arrow"></div>
+        <div class="node" style="border-left:4px solid var(--orange)">
+          <div class="name">ITHub API</div>
+          <div class="desc">demo.logicalisservice.com</div>
+        </div>
+      </div>
+
+      <h3>每层需要配置的 secret / env</h3>
+      <table>
+        <thead><tr><th>层</th><th>平台</th><th>必填 env / secret</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>前端</td>
+            <td>GH Pages</td>
+            <td>
+              <code>VITE_API_BASE</code> = <code>https://ithub-portal-server.onrender.com/api</code><br>
+              <code>VITE_BASE_PATH</code> = <code>/itHub-self-service-portal/</code>（自动从 <code>github.event.repository.name</code> 注入）
+            </td>
+          </tr>
+          <tr>
+            <td>后端</td>
+            <td>Render</td>
+            <td>
+              <code>ITHUB_API_KEY</code>、<code>ITHUB_CUSTOMER_TAG</code>、<code>ITHUB_DEMO_IDENTITY</code>、<code>ITHUB_DEMO_PASSWORD</code>、<code>MINIMAX_API_KEY</code>、<code>WEB_ORIGIN=https://leochen123dong.github.io</code>（<strong>不要漏 https</strong>）
+            </td>
+          </tr>
+          <tr>
+            <td>上游</td>
+            <td>ITHub</td>
+            <td>不需要。CustomerTag / ApiKey 由 Render 在每次请求里注入</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>部署约定（前后端不耦合）</h3>
+      <ul>
+        <li><strong>前端</strong>：push main → 1-2 分钟后自动 GH Pages 新版本（无需任何手动操作）</li>
+        <li><strong>后端</strong>：push main → Render <strong>不会自动</strong>部署。要去 <code>dashboard.render.com</code> 手动点 "Manual Deploy"</li>
+        <li><strong>改前端</strong>不用动后端；<strong>改后端</strong>前端不用重新构建（API 契约不变）</li>
+      </ul>
+    </section>
+
+    <!-- 8. 踩坑清单 -->
+    <section id="sec8">
+      <h2><span class="num">08</span>踩坑清单（按严重度排序）</h2>
+      <p>所有坑都是真金白银踩出来的。每条都是 "症状 → 根因 → 修复"。</p>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>① KB body 字段是 <code>Description</code>，不是 <code>DescriptionText</code></h4>
+          <span class="sev crit">P0</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd>调用 <code>PUT /KnowledgeArticles/{id}</code> 返回 200，但 ITHub admin 后台文章正文是空的</dd>
+          <dt>根因</dt><dd>ITHub 不返回 PATCH 语义错误，只是"字段名不匹配被静默丢弃"</dd>
+          <dt>修复</dt><dd>把 body 里的 <code>DescriptionText</code> 改成 <code>Description</code>。需要把 5 个 fillProbe 跑一遍才能确定</dd>
+        </dl>
+      </div>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>② ITHub PUT 是全 SQL UPDATE，不是 PATCH</h4>
+          <span class="sev crit">P0</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd>只 PUT 一个字段，ITHub 把其他字段全清成 NULL</dd>
+          <dt>根因</dt><dd>ITHub 没有 partial update 概念（PATCH 永远 405）</dd>
+          <dt>修复</dt><dd>在 <code>kbRepair</code> 里 "GET 当前完整对象 → 改 Summary/Description/Status → 整体 PUT 回去"</dd>
+        </dl>
+      </div>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>③ KB 列表嵌套路径永远 10 篇</h4>
+          <span class="sev high">P1</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd><code>/KnowledgeBases/{kbId}/KnowledgeArticles?$top=100</code> 只返回 10 篇，<code>$top</code> 被忽略</dd>
+          <dt>根因</dt><dd>嵌套路径强制分页 10，<code>$top</code> 不生效</dd>
+          <dt>修复</dt><dd>改用顶层 <code>/KnowledgeArticles?KnowledgeBaseId=...</code> —— 一次拿全 21 篇</dd>
+        </dl>
+      </div>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>④ 工单创建路径：<code>/ServiceDesk/Tickets</code> 永远 404</h4>
+          <span class="sev high">P1</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd><code>POST /api/ServiceDesk/Tickets</code> 报 "The resource cannot be found"</dd>
+          <dt>根因</dt><dd>ITHub 工单实际在 Nms 控制器下，ServiceDesk 控制器只管 auto-ticketing profile</dd>
+          <dt>修复</dt><dd>读用 <code>/Nms/Tickets</code>；创建用 <code>/ServiceDesk/Customers/{tag}/TicketTemplates/{tid}/TicketIncidents</code>（必须 customer-scoped + ApiKey）</dd>
+        </dl>
+      </div>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>⑤ 跨站 session cookie 被浏览器拒收</h4>
+          <span class="sev high">P1</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd>本地登录 OK；推到 GH Pages 后每次请求都 "未登录"</dd>
+          <dt>根因</dt><dd>GH Pages (https://leo...) → Render (https://ithub...) 跨站，浏览器拒绝 <code>SameSite=Lax</code> 的 cookie</dd>
+          <dt>修复</dt><dd>加 <code>hasExternalOrigin</code> 判定；跨站时强制 <code>SameSite=None; Secure</code></dd>
+        </dl>
+      </div>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>⑥ React error #31："Objects are not valid as a React child"</h4>
+          <span class="sev high">P1</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd>点开 K100105 整页白屏，console 报 React error #31，对象 <code>{SecurityContextType, ItemId, Type, Name, CustomerTag, ...}</code> 被直接当子节点渲染</dd>
+          <dt>根因</dt><dd>ITHub 对部分字段（<code>KnowledgeCategoryName</code> / <code>CreatedBy</code> / <code>ModifiedBy</code>）返回 rich 子对象而不是字符串，按文章/租户有差异</dd>
+          <dt>修复</dt><dd>在 <code>KbPage</code> 加 <code>safeStr(v)</code> 防御：对象 → 抽 <code>.Name</code> / <code>.UserName</code> / <code>.DisplayName</code></dd>
+        </dl>
+      </div>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>⑦ HTML 实体双重编码 + hex entity</h4>
+          <span class="sev med">P2</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd>文章正文显示成 <code>&#x67E5;&#x8BE2;</code>（"查询"的 hex 编码）</dd>
+          <dt>根因</dt><dd>ITHub 返回的内容已经被双重 HTML 转义，<code>stripHtml</code> 只解了 <code>&amp;#(\d+);</code>（十进制），没解 <code>&amp;#x([0-9a-fA-F]+);</code>（十六进制）</dd>
+          <dt>修复</dt><dd><code>web/src/utils/text.ts</code>：先解 hex → 再解 decimal → 再解 <code>&amp;amp;</code> / <code>&amp;lt;</code> 等命名实体</dd>
+        </dl>
+      </div>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>⑧ KB 状态枚举注释搞反：0/1/2 全部错位</h4>
+          <span class="sev med">P2</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd>ITHub admin 端状态显示 "Published"，Portal Drawer 显示 "待发布"</dd>
+          <dt>根因</dt><dd>代码注释写成 <code>0=Draft, 1=Open/Pending, 2=Published</code>，实际是 <code>0=Draft, 1=Published</code>，没第三态</dd>
+          <dt>修复</dt><dd>改 <code>STATUS_LABELS</code>，删掉 status=2 的"已发布"项</dd>
+        </dl>
+      </div>
+
+      <div class="gotcha">
+        <div class="top">
+          <h4>⑨ Vite tree-shake 把 <code>BUILD_STAMP</code> 删了，bundle hash 不变</h4>
+          <span class="sev med">P2</span>
+        </div>
+        <dl class="gri">
+          <dt>症状</dt><dd>改了前端代码、push 完，浏览器还吃旧 bundle，新功能看不见</dd>
+          <dt>根因</dt><dd>顶层加了 <code>const BUILD_STAMP = '…'</code> 但没被引用，被 Vite tree-shake 掉，content-hash 跟着不变</dd>
+          <dt>修复</dt><dd>让常量被 <code>console.info(...)</code> 引用，hash 每次必变</dd>
+        </dl>
+      </div>
+    </section>
+
+    <!-- 9. AI Vibe Coding 工作流 -->
+    <section id="sec9">
+      <h2><span class="num">09</span>AI Vibe Coding 工作流</h2>
+      <p>这个项目 97 次提交里，<strong>没有一行代码是我手写的</strong>。从立项到上线，循环就是这 4 步：</p>
+
+      <div class="loop">
+        <div class="step">
+          <div class="n">STEP 1</div>
+          <h4>Describe intent</h4>
+          <p>用自然语言描述想做什么、看到什么现象、需要修什么。不需要"该怎么实现"的细节。</p>
+        </div>
+        <div class="step">
+          <div class="n">STEP 2</div>
+          <h4>Claude proposes</h4>
+          <p>AI 读上下文、读相关文件、给方案 + 直接写代码 + 改 build/dev 配置。一次成型，不是草稿。</p>
+        </div>
+        <div class="step">
+          <div class="n">STEP 3</div>
+          <h4>User verifies</h4>
+          <p>人去浏览器看效果、看 console、看 ITHub admin 后台是不是符合预期。截图 + 报错原文回贴给 AI。</p>
+        </div>
+        <div class="step">
+          <div class="n">STEP 4</div>
+          <h4>Refine</h4>
+          <p>AI 基于反馈定位根因（不是绕过），重写/调整代码。验证后进 git，进 PR，进 deploy。</p>
+        </div>
+      </div>
+
+      <h3>4 个具体场景</h3>
+
+      <div class="scenario">
+        <h4>场景 1 · 探针迭代（KB publish 那一仗）</h4>
+        <div class="ex">
+          <strong>👤</strong> "ITHub KB 写不进去，PUT 返回 200 但内容是空的"<br>
+          <strong>🤖</strong> 加 fillProbeV1，扫 4 种字段命名 → 都没生效<br>
+          <strong>👤</strong> "看 fillProbeV1 的请求 body，它对了吗？"<br>
+          <strong>🤖</strong> 加 V2 试 multipart/form-data，V3 试 OData paren path，V4 试嵌套 .Html，V5 修 Content-Type bug<br>
+          <strong>👤</strong> "V5 终于能 PUT 了，但内容还是空，response body 是 <code>true</code>"<br>
+          <strong>🤖</strong> 锁定根因：字段名是 <code>Description</code> 不是 <code>DescriptionText</code>，改 /kb/publish 路由，清掉 5 个 fillProbe
+        </div>
+      </div>
+
+      <div class="scenario">
+        <h4>场景 2 · 状态枚举修正</h4>
+        <div class="ex">
+          <strong>👤</strong> [截图] "ITHub 端状态是 Published，Portal 抽屉显示待发布"<br>
+          <strong>🤖</strong> 读 STATUS_LABELS，对比注释：1=Open/Pending 是我猜的，实际 ITHub 是 1=Published<br>
+          <strong>👤</strong> "好，改吧，顺便让 Vite 输出新 hash 我才能看到"<br>
+          <strong>🤖</strong> 改标签 + bump BUILD_STAMP + push + 等 deploy
+        </div>
+      </div>
+
+      <div class="scenario">
+        <h4>场景 3 · 实体解码 + React error #31</h4>
+        <div class="ex">
+          <strong>👤</strong> [截图] KB 文章正文是 <code>&amp;#x67E5;&amp;#x8BE2;</code><br>
+          <strong>🤖</strong> 改 decodeHtmlEntities，加 hex 解码分支<br>
+          <strong>👤</strong> "现在又点开 KB 整页白屏，console 报 React error #31，对象被当子节点渲染"<br>
+          <strong>🤖</strong> 加 safeStr，遇到对象抽 .Name/.UserName/.DisplayName
+        </div>
+      </div>
+
+      <div class="scenario">
+        <h4>场景 4 · 缓存刷新</h4>
+        <div class="ex">
+          <strong>👤</strong> "没看到刷新按钮，怎么没生效？"<br>
+          <strong>🤖</strong> 翻部署记录，前一版 bundle 是 Bl1IK8Eo，浏览器在吃旧缓存；新 bundle 是 BA12Td0m 包含刷新代码。判断：CDN 没刷新<br>
+          <strong>👤</strong> "那你让部署每次都出新 hash"<br>
+          <strong>🤖</strong> 加 BUILD_STAMP 常量，被 console.info() 引用，hash 必变 + 加 no-cache meta 兜底
+        </div>
+      </div>
+
+      <h3>这个工作流学到的 3 件事</h3>
+      <ol>
+        <li><strong>先描述现象，不要先描述方案。</strong> "点了按钮页面变白" 比 "用 safeStr 处理一下" 高效 10 倍 —— AI 会自己去查 ITHub 返回什么、React 报什么错、自己定位。</li>
+        <li><strong>把环境信息贴全。</strong> console 错误原文、截图、payload 实际值 —— 缺一个就可能猜错。</li>
+        <li><strong>探针是工具不是代码。</strong> 临时 <code>_debug/</code> 路由专门为 "我也不知道 ITHub 想要什么" 这种情况服务。跑出来 200 就搬走，探针就丢。</li>
+      </ol>
+    </section>
+
+    <!-- 10. 展望 -->
+    <section id="sec10">
+      <h2><span class="num">10</span>展望：可扩展方向</h2>
+      <p>4 天做完 MVP，剩下可做的（按 ROI 排序）：</p>
+      <ol>
+        <li>
+          <strong>KB 智能推荐</strong>：工单创建时基于 Summary 自动推荐 3 篇最相关 KB，agent 转人工时一键附议 —— 减少 50% 重复单
+        </li>
+        <li>
+          <strong>Admin 评分趋势图</strong>：当前 <code>AdminStatsWidget</code> 只显示累计数；加一个 30 天 👍/👎 折线图看模型漂移
+        </li>
+        <li>
+          <strong>工单 SLA 告警</strong>：当前每 20s 轮询详情，加一个 "如果状态卡 4h 没动" 的邮件/钉钉告警
+        </li>
+        <li>
+          <strong>多语言</strong>：现在硬写中文；提取到 <code>i18n/</code>，加 en-US 切换（ITHub 多租户场景经常需要）
+        </li>
+        <li>
+          <strong>PWA + 移动端</strong>：Vite PWA plugin 5 行配置就能离线打开；目前用户用手机体验一般
+        </li>
+      </ol>
+
+      <footer>
+        <p>📜 这份路线图用 1 次 Claude Code 对话写完，源文件：<code>docs/AI-VIBE-CODING-ROADMAP.html</code></p>
+        <p>📦 项目仓库：<a href="https://github.com/leochen123dong/itHub-self-service-portal">github.com/leochen123dong/itHub-self-service-portal</a></p>
+        <p>🌐 线上 Demo：<a href="https://leochen123dong.github.io/itHub-self-service-portal/">leochen123dong.github.io/itHub-self-service-portal</a></p>
+      </footer>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>

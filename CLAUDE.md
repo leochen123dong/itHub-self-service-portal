@@ -68,9 +68,12 @@ ITHub API (demo.logicalisservice.com/api)
 - `server/src/routes/ai.ts` — AI 相关 13 个路由。三块：**聊天**（`/chat/init`、`/chat/message`、`/chat/suggestions`、`/chat/:id/messages`、`/chats`、rate、ratings）、**管理**（`/admin/stats`、`/admin/kb-usage` — 都过 `requireAdmin`）、**AI 增值**（`/tickets/:id/kb-draft`、`/kb/publish`、`/chat/summarize`）。MiniMax 调用都走 `server/src/ai/minimax.ts` 的 `chatCompletion`。
 - `server/src/routes/tickets.ts` — 工单 CRUD。**工单创建**走 `POST /api/ServiceDesk/Customers/{tag}/TicketTemplates/{id}/Ticket{Incidents|Problems|Changes|Requests}` 模式（bare `/api/ServiceDesk/Tickets` 返回 404），需要 `ApiKey` + `AccessToken`。**升级工单**是原子 `POST /escalate`：创建工单 + 同步 chat transcript 到 Journals（自动 0→1 状态转换，因为 ITHub 在 Registered 状态禁止写 journal）。**详情接口**透传 OData `$expand` / `$select`（白名单 + 200 字符限制），让前端探测任意字段。
 - `server/src/ai/kbContext.ts` — KB 检索 + 引用追踪。`buildKbContext` 返回 `{ context, refs }`，refs 记录被引用的 article ids，`kbUsageStore` 累计引用次数供 admin 排行。
+- `server/src/ai/kbVersionStore.ts` — KB 文章本地版本计数器。`bumpVersion(id, modifiedUtc?)` 写入并记录新 ModifiedUtc；`noteArticleSeen(id, modifiedUtc)` 在 GET 路径里检测 ITHub ModifiedUtc 是否变了——变了就 +1（捕获 admin 后台改动）。`lastSeenModified: Map<articleId, string>` + `versions: Map<articleId, number>` 都是进程内内存，重启清零。
 - `server/src/ai/chatStore.ts` — **服务端** chat 状态（独立于前端的 `web/src/store/chatStore.ts`）。把 ITHub 风格的 `Role/Content` 转为 MiniMax 历史的 `toMiniMaxHistory`。每条 assistant 消息携带 `kbRefs`。
 - `server/.env` — **租户切换的唯一入口**。`ITHUB_DEMO_*`、`ITHUB_CUSTOMER_TAG`、`ITHUB_API_KEY`，可选 `AI_PROFILE_ID` / `KB_ID`。注意 `.env` 已被 `.gitignore` 排除，不要 commit 真实凭证。
 - `web/src/store/chatStore.ts` — 前端 AI 聊天状态机 + 升级工单的核心。`escalateToTicket()` 是"一键转人工"：先 `POST /api/ai/chat/summarize` 让 MiniMax 把对话压成 ≤50 字中文摘要（失败降级到原"最后 6 条拼接"）→ `POST /api/tickets/escalate`（一个原子调用 = 创建工单 + chatTranscript 同步到 Journals）。`escalating` 状态控制按钮文案。
+- `web/src/utils/text.ts` — `decodeHtmlEntities`（含 hex `&#x67E5;`）+ `stripHtml`。ITHub 双重 HTML 实体编码常见，必须先解 hex 再解 decimal。
+- `web/src/components/Drawer.tsx` — 抽屉。`headerActions?: ReactNode` prop 用于在标题右侧塞自定义按钮（KB 页"刷新"按钮就是用这个）。
 - `web/src/components/TicketTimeline.tsx` — Journal 渲染。`stripHtml` 处理 ITHub 返回的 HTML 包裹（`<p>/<br>`）+ 双重 HTML 实体编码（**含 hex entity `&#x5B89;`** — 必须按 base-16 解码，不能只解 `&#(\d+);`）。
 - `web/src/components/KbDraftModal.tsx` — AI 总结工单 → KB 草稿 → 发布 的模态框。发布失败时显示上游错误 + 一键复制草稿。
 - `web/src/components/AdminStatsWidget.tsx` — admin 评分 + KB 引用排行 + 从未引用的 KB（ChatPage 底部）。
@@ -97,6 +100,22 @@ ITHub API (demo.logicalisservice.com/api)
 ## 切换租户 / 重新 Demo
 
 只改 `server/.env`（本地）或 Render Environment（线上）：`ITHUB_CUSTOMER_TAG`、`ITHUB_DEMO_IDENTITY`、`ITHUB_DEMO_PASSWORD`，可选 `AI_PROFILE_ID`、`KB_ID`。重启后端即生效，前端无需改动。
+
+## ITHub 端踩坑（高频）
+
+- **KB body 字段名是 `Description`，不是 `DescriptionText`**——ITHub PUT 全 SQL UPDATE（不是 PATCH），必须把所有 NOT NULL 字段一起带上。`Server/src/routes/ai.ts` 的 `/kb/publish` 和 `/kbRepair` 已经验证过字段集，参考 `kbRepair` 里读回的 `current` 字段全集。
+- **KB 状态枚举**：`0 = Draft (草稿)`，`1 = Published (已发布)`。没有"待发布"中间态，Portal UI label 在 `web/src/pages/KbPage.tsx` 的 `STATUS_LABELS`。
+- **HTML 实体双重编码 + hex entity**：ITHub 返回的 KB 正文 / 工单 Journal 双重 HTML 转义，含 `&#x67E5;` 这种 hex entity。`web/src/utils/text.ts` 的 `decodeHtmlEntities` 必须先解 hex 再解 decimal，再解 `&amp;/&lt;` 等命名实体。
+- **React error #31（"Objects are not valid as a React child"）**：ITHub 对部分字段（`KnowledgeCategoryName` / `CreatedBy` / `ModifiedBy`）会返回 rich `{SecurityContextType, ItemId, Type, Name, CustomerTag, ...}` 子对象而不是字符串。`KbPage` 顶部有 `safeStr()` 工具函数，遇到对象抽 `.Name` / `.UserName` / `.DisplayName`。
+- **读副本延迟 3-5+s**：admin 后台修改后立刻查可能拿到旧值；写后等 2-3s 再读。
+- **前端 GET 自动 `cache: 'no-store'`**：`web/src/api/client.ts` 给所有 GET 加 `cache: 'no-store'` + 时间戳 query（KB 写后 admin 后台改完状态时不能让浏览器吃上次的缓存）。
+
+## 前端部署缓存（GH Pages）
+
+- `web/src/pages/KbPage.tsx` 顶部有一个 `BUILD_STAMP = 'yyyy-mm-dd-xxx'` 常量，每次想要 deployment 出新 bundle hash 时手动改一行（Vite tree-shake 掉死代码，所以用一个 `console.info()` 把它"用起来"）。不改源码也能靠代码改动让 hash 自然变；这是兜底。
+- 前端 deploy 后用户浏览器可能吃到上版缓存——`index.html` 加了 `<meta http-equiv="Cache-Control" content="no-cache">`（见 `web/index.html`），但实际生效靠新 hash 让旧 bundle 404。
+
+
 
 ## 部署
 
