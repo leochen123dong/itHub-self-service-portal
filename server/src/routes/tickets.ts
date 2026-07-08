@@ -6,6 +6,7 @@ import { requireAdmin } from '../middleware/admin.js';
 import { config } from '../config.js';
 import { isVipGroup as isVipGroupConfigured } from '../ai/vipConfigStore.js';
 import { getCached as getVipCached, setCache as setVipCache } from '../ai/vipCache.js';
+import { recordGroups as recordObservedGroups } from '../ai/vipGroupRegistry.js';
 
 export const ticketsRouter = Router();
 
@@ -45,6 +46,11 @@ async function resolveVipForTickets(
           accessToken,
         });
         const groups = Array.isArray(u?.UserGroups) ? u.UserGroups : [];
+        // Feed every observed group into the registry so the admin
+        // /admin/observed-groups endpoint can list them. Runs before
+        // the VIP filter so it captures groups the admin hasn't flagged
+        // yet — those are exactly what the UI needs to show as choices.
+        recordObservedGroups(groups);
         const hit = groups.filter((g: any) =>
           isVipGroupConfigured(Number(g?.UserGroupId ?? g?.Id)),
         );

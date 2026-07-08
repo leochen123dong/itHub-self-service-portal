@@ -18,7 +18,7 @@ export function AdminVipPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await adminApi.getUserGroups();
+        const r = await adminApi.getObservedGroups();
         setGroups(r.groups || []);
         setSelected(new Set((r.vipGroupIds || []).map(Number)));
       } catch (e: any) {
