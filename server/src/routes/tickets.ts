@@ -10,12 +10,18 @@ import { recordGroups as recordObservedGroups } from '../ai/vipGroupRegistry.js'
 
 export const ticketsRouter = Router();
 
-// For each ticket, looks up the customer's ITHub UserGroups and decides
-// whether any of them is currently flagged VIP by the admin. Mutates the
-// ticket objects in place, attaching IsVip + VipUserGroups.
+// For each ticket, looks up the ticket creator's ITHub UserGroups and
+// decides whether any of them is currently flagged VIP by the admin.
+// Mutates the ticket objects in place, attaching IsVip + VipUserGroups.
+//
+// Note: tickets carry BOTH a `CustomerId` (the customer organization —
+// not a person) and a `CreatedBy.ItemId` (the actual user who filed the
+// ticket). ITHub's /Security/Users/{id} endpoint expects a user id, so
+// we key on CreatedBy.ItemId. Using CustomerId would 404 on a user-
+// shaped lookup.
 //
 // Strategy:
-//   - Collect distinct CustomerIds across the batch.
+//   - Collect distinct creator ids across the batch.
 //   - Skip ids that vipCache already resolved (5min TTL).
 //   - For the rest, fan out /Security/Users/{id} in parallel; on any error
 //     just cache the negative ("not VIP") so we don't retry forever.
@@ -23,7 +29,7 @@ export const ticketsRouter = Router();
 //     onto each one.
 //
 // Resolving only on first sight per-id means a 50-ticket list is at most
-// 50 parallel calls — bound by unique customer count (usually a handful).
+// 50 parallel calls — bound by unique creator count (usually a handful).
 async function resolveVipForTickets(
   tickets: any[],
   accessToken: string,
@@ -32,7 +38,7 @@ async function resolveVipForTickets(
   const ids = [
     ...new Set(
       tickets
-        .map((t) => Number(t?.CustomerId ?? t?.CustomerUserId))
+        .map((t) => Number(t?.CreatedBy?.ItemId))
         .filter((n) => Number.isFinite(n) && n > 0),
     ),
   ];
@@ -71,7 +77,7 @@ async function resolveVipForTickets(
   );
 
   for (const t of tickets) {
-    const cid = Number(t?.CustomerId ?? t?.CustomerUserId);
+    const cid = Number(t?.CreatedBy?.ItemId);
     if (!Number.isFinite(cid) || cid <= 0) continue;
     const v = getVipCached(cid);
     if (v) {

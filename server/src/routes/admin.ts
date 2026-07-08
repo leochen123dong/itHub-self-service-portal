@@ -44,10 +44,13 @@ async function warmUpRegistry(accessToken: string): Promise<void> {
     { accessToken, query: { offset: 0, count: 50 } },
   );
   const tickets = Array.isArray(ticketRes) ? ticketRes : [];
+  // Tickets expose `CustomerId` (the customer organization — not a person)
+  // and `CreatedBy.ItemId` (the actual user who filed the ticket).
+  // /Security/Users/{id} expects a user id, so we key on CreatedBy.ItemId.
   const ids = [
     ...new Set(
       tickets
-        .map((t: any) => Number(t?.CustomerId ?? t?.CustomerUserId))
+        .map((t: any) => Number(t?.CreatedBy?.ItemId))
         .filter((n: number) => Number.isFinite(n) && n > 0),
     ),
   ];
