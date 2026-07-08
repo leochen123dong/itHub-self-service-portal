@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { isVipGroup as isVipGroupConfigured } from '../ai/vipConfigStore.js';
 import { getCached as getVipCached, setCache as setVipCache } from '../ai/vipCache.js';
 import { recordGroups as recordObservedGroups } from '../ai/vipGroupRegistry.js';
+import { refreshSessionAccessToken } from '../session/store.js';
 
 export const ticketsRouter = Router();
 
@@ -302,6 +303,11 @@ async function createTicketCore(opts: {
   return (await ithubFetch<any>(path, {
     method: 'POST',
     apiKey: config.ithub.apiKey,
+    // ITHub rejects ticket-create POSTs with only ApiKey (401). The session's
+    // AccessToken carries the user's identity & tenant scope, which ITHub
+    // wants alongside the tenant ApiKey. Earlier versions dropped
+    // accessToken here — that was the regression.
+    accessToken: opts.accessToken,
     body: {
       Summary: String(opts.summary).slice(0, 200),
       Description: String(opts.description ?? opts.summary),
@@ -357,18 +363,41 @@ ticketsRouter.post('/escalate', requireSession, async (req, res): Promise<void> 
     return;
   }
 
-  // Step 1: create the ticket.
-  let ticket: Record<string, unknown>;
-  try {
-    ticket = await createTicketCore({
-      accessToken: req.session!.accessToken,
-      templateId,
-      ticketType,
-      summary,
-      description,
-    });
-  } catch (e) {
-    if (e instanceof ITHubError && e.code === 'NO_API_KEY') {
+  // Step 1: create the ticket. If ITHub rejects with 401, our session's
+  // AccessToken may have expired on ITHub's side while our backend session
+  // is still alive. Try a one-shot refresh using the env demo credentials,
+  // then retry the create once. Hard fails (including refresh failure)
+  // surface to the client.
+  const sid = (req as any).cookies?.[config.session.cookieName];
+  let ticket: Record<string, unknown> | undefined;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      ticket = await createTicketCore({
+        accessToken: req.session!.accessToken,
+        templateId,
+        ticketType,
+        summary,
+        description,
+      });
+      lastErr = undefined;
+      break;
+    } catch (e) {
+      lastErr = e;
+      const isAuth401 =
+        e instanceof ITHubError && e.status === 401;
+      if (isAuth401 && attempt === 0 && sid) {
+        // Refresh and retry once.
+        const refreshed = await refreshSessionAccessToken(sid);
+        if (!refreshed) break;
+        continue;
+      }
+      break;
+    }
+  }
+  if (!ticket || lastErr) {
+    const err_ = lastErr || new Error('工单创建失败');
+    if (err_ instanceof ITHubError && (err_ as ITHubError).code === 'NO_API_KEY') {
       res.status(500).json({
         error: {
           code: 'NO_API_KEY',
@@ -377,7 +406,7 @@ ticketsRouter.post('/escalate', requireSession, async (req, res): Promise<void> 
       });
       return;
     }
-    const { status, body } = err(e, '创建工单失败');
+    const { status, body } = err(err_, '创建工单失败');
     res.status(status).json(body);
     return;
   }
