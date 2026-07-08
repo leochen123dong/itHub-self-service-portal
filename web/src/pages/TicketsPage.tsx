@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ticketsApi } from '../api/tickets';
 import type { Ticket, TicketJournal } from '../types/api';
@@ -16,6 +16,7 @@ export function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [vipOnly, setVipOnly] = useState(false);
 
   const [detail, setDetail] = useState<Ticket | null>(null);
   const [journals, setJournals] = useState<TicketJournal[]>([]);
@@ -99,6 +100,15 @@ export function TicketsPage() {
             <p className="page-subtitle">{detail.Summary || '—'}</p>
           </div>
         </div>
+
+        {detail.IsVip && (
+          <div className="vip-banner">
+            <span className="vip-banner-tag">VIP 客户</span>
+            <span className="vip-banner-text">
+              所属用户组：{(detail.VipUserGroups || []).join('、') || '已标记'}
+            </span>
+          </div>
+        )}
 
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
@@ -196,20 +206,45 @@ export function TicketsPage() {
     );
   }
 
+  const vipCount = useMemo(
+    () => tickets.filter((t) => t.IsVip).length,
+    [tickets],
+  );
+  const filteredTickets = useMemo(
+    () => (vipOnly ? tickets.filter((t) => t.IsVip) : tickets),
+    [tickets, vipOnly],
+  );
+
   return (
     <div className="container">
       <div className="page-header">
         <div>
           <h1 className="page-title">我的工单</h1>
-          <p className="page-subtitle">查看您的所有工单</p>
+          <p className="page-subtitle">
+            查看您的所有工单
+            {vipCount > 0 && (
+              <> · <span style={{ color: '#d97706', fontWeight: 600 }}>{vipCount} 个 VIP</span></>
+            )}
+          </p>
         </div>
+        {vipCount > 0 && (
+          <button
+            className={`vip-filter-chip${vipOnly ? ' active' : ''}`}
+            onClick={() => setVipOnly((v) => !v)}
+          >
+            {vipOnly ? '✓ 只看 VIP' : '只看 VIP'}
+          </button>
+        )}
       </div>
       {error && <div style={{ color: 'var(--danger)', marginBottom: 12 }}>{error}</div>}
       {loading && <div className="card"><div className="skeleton" style={{ height: 200 }} /></div>}
       {!loading && tickets.length === 0 && (
         <EmptyState title="暂无工单" hint={error || '您还没有提交任何工单'} />
       )}
-      {!loading && tickets.length > 0 && (
+      {!loading && tickets.length > 0 && filteredTickets.length === 0 && vipOnly && (
+        <EmptyState title="当前没有 VIP 工单" hint="取消 VIP 过滤查看全部工单" />
+      )}
+      {!loading && filteredTickets.length > 0 && (
         <table className="table">
           <thead>
             <tr>
@@ -222,7 +257,7 @@ export function TicketsPage() {
             </tr>
           </thead>
           <tbody>
-            {tickets.map((t) => <TicketCard key={t.TicketId} ticket={t} />)}
+            {filteredTickets.map((t) => <TicketCard key={t.TicketId} ticket={t} />)}
           </tbody>
         </table>
       )}

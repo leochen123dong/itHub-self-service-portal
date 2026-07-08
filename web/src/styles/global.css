@@ -826,6 +826,91 @@ input, textarea, select {
   background: var(--brand-primary-light);
 }
 
+/* === VIP === */
+/* Orange chip on a ticket row + a banner on the detail page. The list /
+   detail page sets IsVip on a ticket only after the server resolves the
+   ticket's customer against the admin-selected VIP user groups (see
+   server/src/routes/tickets.ts resolveVipForTickets). */
+.vip-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  margin-left: 8px;
+  vertical-align: middle;
+  box-shadow: 0 1px 2px rgba(217, 119, 6, 0.4);
+}
+.vip-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-left: 4px solid #d97706;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  color: #78350f;
+  margin-bottom: 12px;
+}
+.vip-banner-tag {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.vip-banner-text { flex: 1; }
+
+.vip-filter-chip {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  transition: all .15s ease;
+}
+.vip-filter-chip:hover:not(.active) {
+  border-color: #d97706;
+  color: #d97706;
+}
+.vip-filter-chip.active {
+  background: #d97706;
+  color: white;
+  border-color: #d97706;
+}
+
+/* Admin VIP page: checkbox list. */
+.vip-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vip-group-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background .12s ease;
+}
+.vip-group-item:hover { background: var(--bg); }
+.vip-group-item input[type="checkbox"] {
+  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #d97706;
+}
+
 /* === Inline admin stats widget (collapsed by default) === */
 .admin-widget {
   margin-top: 16px;

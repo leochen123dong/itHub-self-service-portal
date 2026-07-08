@@ -35,6 +35,9 @@ export function Layout() {
         <NavLink to="/tickets" className={({ isActive }) => `topnav-tab${isActive ? ' active' : ''}`}>
           我的工单
         </NavLink>
+        <NavLink to="/admin/vip" className={({ isActive }) => `topnav-tab${isActive ? ' active' : ''}`}>
+          VIP 设置
+        </NavLink>
       </div>
       <div className="topnav-user">
         <span className="user-avatar">{initial}</span>

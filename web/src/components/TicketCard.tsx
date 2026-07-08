@@ -35,6 +35,14 @@ export function TicketCard({ ticket }: Props) {
         <Link to={`/tickets/${ticket.TicketId}`} style={{ fontWeight: 600 }}>
           #{ticket.TicketId}
         </Link>
+        {ticket.IsVip && (
+          <span
+            className="vip-badge"
+            title={`VIP 用户组：${(ticket.VipUserGroups || []).join('、') || '已标记'}`}
+          >
+            VIP
+          </span>
+        )}
       </td>
       <td>{ticket.Summary || '—'}</td>
       <td>

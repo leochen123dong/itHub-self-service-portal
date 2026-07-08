@@ -141,6 +141,11 @@ export interface Ticket {
   CreatedUtc?: string;
   CreatedLocalTime?: string;
   CustomerName?: string;
+  // VIP marker fields populated server-side after resolving the ticket's
+  // customerId against the admin's selected VIP user groups. Optional
+  // because list entries may pre-date the resolve pass.
+  IsVip?: boolean;
+  VipUserGroups?: string[];
   AssignedUserGroup?: { Name?: string; UserGroupId?: number };
   // ITHub user fields passed through so the UI can show per-user color and
   // online status. Field names mirror the priority pattern above.
@@ -160,6 +165,12 @@ export interface Ticket {
   IncidentState?: string | number;
   TicketCategory?: { Name?: string };
   TicketDetail?: any;
+}
+
+export interface UserGroup {
+  UserGroupId: number;
+  Name?: string;
+  Description?: string;
 }
 
 export interface TicketJournal {

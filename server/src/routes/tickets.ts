@@ -4,8 +4,76 @@ import { ITHubError } from '../http/errors.js';
 import { requireSession } from '../session/middleware.js';
 import { requireAdmin } from '../middleware/admin.js';
 import { config } from '../config.js';
+import { isVipGroup as isVipGroupConfigured } from '../ai/vipConfigStore.js';
+import { getCached as getVipCached, setCache as setVipCache } from '../ai/vipCache.js';
 
 export const ticketsRouter = Router();
+
+// For each ticket, looks up the customer's ITHub UserGroups and decides
+// whether any of them is currently flagged VIP by the admin. Mutates the
+// ticket objects in place, attaching IsVip + VipUserGroups.
+//
+// Strategy:
+//   - Collect distinct CustomerIds across the batch.
+//   - Skip ids that vipCache already resolved (5min TTL).
+//   - For the rest, fan out /Security/Users/{id} in parallel; on any error
+//     just cache the negative ("not VIP") so we don't retry forever.
+//   - After resolving, walk the tickets again and copy IsVip / VipUserGroups
+//     onto each one.
+//
+// Resolving only on first sight per-id means a 50-ticket list is at most
+// 50 parallel calls — bound by unique customer count (usually a handful).
+async function resolveVipForTickets(
+  tickets: any[],
+  accessToken: string,
+): Promise<void> {
+  if (!Array.isArray(tickets) || tickets.length === 0) return;
+  const ids = [
+    ...new Set(
+      tickets
+        .map((t) => Number(t?.CustomerId ?? t?.CustomerUserId))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ];
+  if (ids.length === 0) return;
+
+  const missing = ids.filter((id) => !getVipCached(id));
+  await Promise.all(
+    missing.map(async (id) => {
+      try {
+        const u = await ithubFetch<any>(`/api/Security/Users/${id}`, {
+          accessToken,
+        });
+        const groups = Array.isArray(u?.UserGroups) ? u.UserGroups : [];
+        const hit = groups.filter((g: any) =>
+          isVipGroupConfigured(Number(g?.UserGroupId ?? g?.Id)),
+        );
+        setVipCache(id, {
+          isVip: hit.length > 0,
+          groups: hit
+            .map((g: any) => String(g?.Name ?? g?.DisplayName ?? ''))
+            .filter(Boolean),
+          cachedAt: Date.now(),
+        });
+      } catch {
+        // Negative cache so we don't retry on every refresh. User-group
+        // lookups are rarely spurious — typically ITHub permission issues,
+        // which won't fix themselves within the TTL window anyway.
+        setVipCache(id, { isVip: false, groups: [], cachedAt: Date.now() });
+      }
+    }),
+  );
+
+  for (const t of tickets) {
+    const cid = Number(t?.CustomerId ?? t?.CustomerUserId);
+    if (!Number.isFinite(cid) || cid <= 0) continue;
+    const v = getVipCached(cid);
+    if (v) {
+      t.IsVip = v.isVip;
+      t.VipUserGroups = v.groups;
+    }
+  }
+}
 
 function err(e: unknown, fallback: string) {
   if (e instanceof ITHubError) {
@@ -34,8 +102,19 @@ ticketsRouter.get('/', requireSession, async (req, res): Promise<void> => {
     // tenant ApiKey header — bare /api/ServiceDesk/Tickets returns 404.
     const data = await ithubFetch<any>(
       `/api/ServiceDesk/Customers/${config.ithub.customerTag}/Tickets`,
-      { apiKey: config.ithub.apiKey, query: { offset, count } },
+      {
+        accessToken: req.session!.accessToken,
+        apiKey: config.ithub.apiKey,
+        query: { offset, count },
+      },
     );
+    // resolveVipForTickets mutates `data` in place, attaching IsVip +
+    // VipUserGroups to each ticket. Failures inside (e.g. ITHub
+    // /Security/Users/{id} 403) get negative-cached and don't bubble up —
+    // tickets simply show no badge, which is the safe default.
+    if (Array.isArray(data)) {
+      await resolveVipForTickets(data, req.session!.accessToken);
+    }
     res.json(data);
   } catch (e) {
     const { status, body } = err(e, '获取工单列表失败');
@@ -120,6 +199,7 @@ ticketsRouter.get('/:id', requireSession, async (req, res): Promise<void> => {
         ...(Object.keys(query).length ? { query } : {}),
       },
     );
+    await resolveVipForTickets([data], req.session!.accessToken);
     res.json(data);
   } catch (e) {
     const { status, body } = err(e, '获取工单详情失败');
@@ -301,17 +381,20 @@ ticketsRouter.post('/escalate', requireSession, async (req, res): Promise<void> 
   // Step 2: post the chat transcript as a journal. Skip silently if empty.
   const transcript = String(chatTranscript ?? '').trim();
   if (!transcript) {
+    await resolveVipForTickets([ticket], req.session!.accessToken);
     res.json({ ...ticket, journalPosted: false, journalError: 'chatTranscript 为空，跳过同步备注' });
     return;
   }
 
   try {
     await appendJournalAsHtml(String(ticketId), transcript, req.session!.accessToken);
+    await resolveVipForTickets([ticket], req.session!.accessToken);
     res.json({ ...ticket, journalPosted: true });
   } catch (e) {
     // Don't 500 the whole request — the ticket exists, just the journal didn't.
     const zh = e instanceof ITHubError ? e.upstreamMessage || 'ITHub 拒绝' : '备注同步失败';
     console.warn(`[ticket] journal sync failed for ${ticketId}:`, (e as Error)?.message);
+    await resolveVipForTickets([ticket], req.session!.accessToken);
     res.json({ ...ticket, journalPosted: false, journalError: zh });
   }
 });
