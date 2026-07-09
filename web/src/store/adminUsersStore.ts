@@ -5,7 +5,8 @@ export type AdminUserTab =
   | 'apiKey'
   | 'lifecycle'
   | 'usage'
-  | 'audit';
+  | 'audit'
+  | 'apiUsage';
 
 interface AdminUsersState {
   selectedId: number | null;

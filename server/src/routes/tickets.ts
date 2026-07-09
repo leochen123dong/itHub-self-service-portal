@@ -51,7 +51,9 @@ async function resolveVipForTickets(
       try {
         const u = await ithubFetch<any>(`/api/Security/Users/${id}`, {
           accessToken,
-        });
+        
+        callerIdentity: 'anon',
+        callerUserId: 0,});
         const groups = Array.isArray(u?.UserGroups) ? u.UserGroups : [];
         // Feed every observed group into the registry so the admin
         // /admin/observed-groups endpoint can list them. Runs before
@@ -118,7 +120,9 @@ ticketsRouter.get('/', requireSession, async (req, res): Promise<void> => {
       {
         accessToken: req.session!.accessToken,
         apiKey: config.ithub.apiKey,
-        query: { offset, count },
+        query: { offset, count ,
+        callerIdentity: 'anon',
+        callerUserId: 0,},
       },
     );
     // resolveVipForTickets mutates `data` in place, attaching IsVip +
@@ -233,7 +237,9 @@ ticketsRouter.get('/:id/journals', requireSession, async (req, res): Promise<voi
       {
         accessToken: req.session!.accessToken,
         apiKey: config.ithub.apiKey,
-      },
+      
+        callerIdentity: 'anon',
+        callerUserId: 0,},
     );
     res.json(data);
   } catch (e) {
@@ -252,7 +258,9 @@ ticketsRouter.post('/by-checkpoint', requireSession, async (req, res): Promise<v
     const data = await ithubFetch<any>('/api/ServiceDesk/Tickets/ByCheckPoint', {
       method: 'POST',
       accessToken: req.session!.accessToken,
-      body: { CheckPoint: checkPoint },
+      body: { CheckPoint: checkPoint ,
+        callerIdentity: 'anon',
+        callerUserId: 0,},
     });
     res.json(data);
   } catch (e) {
@@ -279,6 +287,10 @@ async function createTicketCore(opts: {
   ticketType?: number;
   summary: string;
   description?: string;
+  // --- Instrumentation (api request log) ---
+  // Caller identity for usage stats. Defaults to 'anon'/0 if omitted.
+  callerIdentity?: string;
+  callerUserId?: number;
 }): Promise<Record<string, unknown>> {
   if (!config.ithub.apiKey) {
     throw new ITHubError(500, 'NO_API_KEY', '服务端未配置 ITHUB_API_KEY');
@@ -288,7 +300,9 @@ async function createTicketCore(opts: {
   if (typeof type !== 'number') {
     const detail = (await ithubFetch<any>(`/api/ServiceDesk/TicketTemplates/${opts.templateId}`, {
       accessToken: opts.accessToken,
-    })) as Record<string, unknown>;
+    
+        callerIdentity: opts.callerIdentity,
+        callerUserId: opts.callerUserId,})) as Record<string, unknown>;
     type = detail.TicketType as number;
   }
   const typeMap: Record<number, string> = {
@@ -314,7 +328,9 @@ async function createTicketCore(opts: {
       Priority: 3,
       Impact: 3,
       Urgency: 3,
-    },
+    
+        callerIdentity: opts.callerIdentity,
+        callerUserId: opts.callerUserId,},
   })) as Record<string, unknown>;
 }
 
@@ -331,6 +347,8 @@ ticketsRouter.post('/', requireSession, async (req, res): Promise<void> => {
       ticketType,
       summary,
       description,
+      callerIdentity: 'anon',
+      callerUserId: 0,
     });
     res.json(data);
   } catch (e) {
@@ -379,6 +397,8 @@ ticketsRouter.post('/escalate', requireSession, async (req, res): Promise<void> 
         ticketType,
         summary,
         description,
+        callerIdentity: 'anon',
+        callerUserId: 0,
       });
       lastErr = undefined;
       break;
@@ -428,7 +448,7 @@ ticketsRouter.post('/escalate', requireSession, async (req, res): Promise<void> 
   }
 
   try {
-    await appendJournalAsHtml(String(ticketId), transcript, req.session!.accessToken);
+    await appendJournalAsHtml(String(ticketId), transcript, req.session!.accessToken, req.session!.identity, req.session!.userId);
     await resolveVipForTickets([ticket], req.session!.accessToken);
     res.json({ ...ticket, journalPosted: true });
   } catch (e) {
@@ -447,7 +467,9 @@ ticketsRouter.put('/:id', requireSession, async (req, res): Promise<void> => {
       method: 'PUT',
       accessToken: req.session!.accessToken,
       body: req.body,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     res.json(data);
   } catch (e) {
     const { status, body } = err(e, '更新工单失败');
@@ -462,11 +484,16 @@ async function appendJournalAsHtml(
   ticketId: string | number,
   html: string,
   accessToken: string,
+  // --- Instrumentation (api request log) ---
+  callerIdentity?: string,
+  callerUserId?: number,
 ): Promise<Record<string, unknown>> {
   // Pull ticket detail to learn TicketType and current state.
   const ticket = (await ithubFetch<any>(`/api/ServiceDesk/Tickets/${ticketId}`, {
     accessToken,
-  })) as Record<string, unknown>;
+  
+        callerIdentity: callerIdentity,
+        callerUserId: callerUserId,})) as Record<string, unknown>;
 
   const ticketType = Number(ticket.TicketType ?? 0);
   const stateFieldMap: Record<number, { field: string; endpoint: string }> = {
@@ -489,7 +516,9 @@ async function appendJournalAsHtml(
           [stateInfo.field]: 1,
           TicketSuspendData: null,
           TicketClosureData: null,
-        },
+        
+        callerIdentity: callerIdentity,
+        callerUserId: callerUserId,},
       });
     } catch (e) {
       // Don't block the journal on a failed state transition — ITHub might
@@ -510,7 +539,9 @@ async function appendJournalAsHtml(
       ContactId: null,
       ContactType: null,
       IncludeChildren: false,
-    },
+    
+        callerIdentity: callerIdentity,
+        callerUserId: callerUserId,},
   })) as Record<string, unknown>;
 }
 
@@ -533,7 +564,7 @@ ticketsRouter.post('/:id/journals', requireSession, async (req, res): Promise<vo
   const html = '<p>' + content.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
 
   try {
-    const data = await appendJournalAsHtml(ticketId, html, req.session!.accessToken);
+    const data = await appendJournalAsHtml(ticketId, html, req.session!.accessToken, req.session!.identity, req.session!.userId);
     res.json(data);
   } catch (e) {
     const { status, body } = err(e, '添加备注失败');

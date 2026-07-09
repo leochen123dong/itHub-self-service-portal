@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { ITHubError } from './errors.js';
+import { record as recordApiRequest, type AuthMode } from '../adminUsers/apiRequestLog.js';
 
 const TIMEOUT_MS = 20_000;
 const MAX_RETRIES = 1;
@@ -20,6 +21,11 @@ interface FetchOptions {
   // AccessToken, ApiKey, Content-Type). Use for OData-specific headers
   // like If-Match: *.
   headers?: Record<string, string>;
+  // --- Instrumentation (api request log) ---
+  // Caller identity propagated by the route handler so the request log
+  // can answer "which ITHub user triggered this call". Default 'anon'.
+  callerIdentity?: string;
+  callerUserId?: number;
 }
 
 function buildUrl(path: string, query?: FetchOptions['query']): string {
@@ -48,6 +54,10 @@ export async function ithubFetch<T = unknown>(
   }
 
   let lastErr: unknown = null;
+  let lastStatus = 0;
+  let attempts = 0;
+  const t0 = performance.now();
+  try {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -70,6 +80,8 @@ export async function ithubFetch<T = unknown>(
         try { json = JSON.parse(text); } catch { /* not json */ }
       }
 
+      attempts = attempt + 1;
+      lastStatus = res.status;
       if (!res.ok) {
         const upstreamMsg =
           (json && typeof json === 'object' && 'Message' in (json as object) && typeof (json as any).Message === 'string')
@@ -87,11 +99,15 @@ export async function ithubFetch<T = unknown>(
         }
         throw new ITHubError(res.status, code, upstreamMsg, upstreamMsg);
       }
+      lastStatus = res.status;
       return json as T;
     } catch (err: any) {
       clearTimeout(timer);
       lastErr = err;
-      if (err instanceof ITHubError) throw err;
+      if (err instanceof ITHubError) {
+        lastStatus = err.status;
+        throw err;
+      }
       if (err?.name === 'AbortError') {
         if (signal?.aborted) throw err;
         if (attempt < MAX_RETRIES) {
@@ -104,6 +120,26 @@ export async function ithubFetch<T = unknown>(
     }
   }
   throw lastErr instanceof ITHubError ? lastErr : new ITHubError(0, 'UNKNOWN', '请求失败');
+  } finally {
+    // Single log entry per business call — wraps the entire retry loop so
+    // a 502→retry→200 doesn't produce two log rows. Best-effort: never
+    // throws into the caller's flow.
+    const authMode: AuthMode =
+      accessToken && apiKey ? 'both'
+      : accessToken ? 'accessToken'
+      : apiKey ? 'apiKey'
+      : 'none';
+    recordApiRequest({
+      method,
+      path,
+      statusCode: lastStatus,
+      latencyMs: Math.max(1, Math.round(performance.now() - t0)),
+      callerIdentity: options.callerIdentity?.toString() || 'anon',
+      callerUserId: options.callerUserId ?? 0,
+      authMode,
+      attemptedRetries: Math.max(0, attempts - 1),
+    });
+  }
 }
 
 function sleep(ms: number) {

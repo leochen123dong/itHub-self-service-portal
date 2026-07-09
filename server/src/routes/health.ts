@@ -22,7 +22,9 @@ healthRouter.get('/debug/kbs', requireSession, async (req, res): Promise<void> =
     const customerTag = config.ithub.customerTag;
     const list = await ithubFetch<any[]>('/api/Knowledge/KnowledgeBases', {
       accessToken: req.session!.accessToken,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     const discoveredId = await resolveKbId(req.session!.accessToken, customerTag);
     res.json({
       customerTag,
@@ -51,7 +53,9 @@ healthRouter.get('/debug/kb/:id/articles', requireSession, async (req, res): Pro
     const kbId = parseInt(req.params.id, 10);
     const data = await ithubFetch<any>(
       `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
-      { accessToken: req.session!.accessToken },
+      { accessToken: req.session!.accessToken ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     );
     res.json({ kbId, count: Array.isArray(data) ? data.length : 'not-array', articles: data });
   } catch (e: any) {
@@ -66,7 +70,9 @@ healthRouter.get('/debug/kb/:id/categories', requireSession, async (req, res): P
     const kbId = parseInt(req.params.id, 10);
     const data = await ithubFetch<any>(
       `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticleCategories`,
-      { accessToken: req.session!.accessToken },
+      { accessToken: req.session!.accessToken ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     );
     res.json({ kbId, count: Array.isArray(data) ? data.length : 'not-array', categories: data });
   } catch (e: any) {
@@ -95,7 +101,9 @@ healthRouter.get('/debug/kb/:id/probe-paging', requireSession, async (req, res):
     try {
       const data = await ithubFetch<any>(
         `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
-        { accessToken: token, query: v.query },
+        { accessToken: token, query: v.query ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
       );
       const list: any[] = Array.isArray(data)
         ? data
@@ -118,7 +126,9 @@ healthRouter.get('/debug/kb/:id/all-articles', requireSession, async (req, res):
     const kbId = parseInt(req.params.id, 10);
     const data = await ithubFetch<any>(`/api/Knowledge/KnowledgeArticles`, {
       accessToken: req.session!.accessToken,
-      query: { KnowledgeBaseId: kbId },
+      query: { KnowledgeBaseId: kbId ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     });
     const list: any[] = Array.isArray(data)
       ? data
@@ -163,7 +173,9 @@ healthRouter.get('/debug/kb/:id/probe-paths', requireSession, async (req, res): 
         accessToken: token,
         method: p.method ?? 'GET',
         query: p.query,
-        body: p.method === 'POST' ? { KnowledgeBaseId: kbId, TopK: 100 } : undefined,
+        body: p.method === 'POST' ? { KnowledgeBaseId: kbId, TopK: 100 ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,} : undefined,
       });
       const list: any[] = Array.isArray(data)
         ? data
@@ -199,7 +211,9 @@ healthRouter.post('/debug/kb-search', requireSession, async (req, res): Promise<
       {
         method: 'POST',
         accessToken: req.session!.accessToken,
-        body: { Query: query, TopK: topK },
+        body: { Query: query, TopK: topK ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
       },
     );
     res.json({ kbId: effectiveKbId, query, topK, result: data });

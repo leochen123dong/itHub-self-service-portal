@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { adminUsersApi, type AdminUserDetail, type AuditEvent, type UsageSummary } from '../api/adminUsers';
+import {
+  adminUsersApi,
+  type AdminUserDetail,
+  type AuditEvent,
+  type UsageSummary,
+  type ApiRequestLogEntry,
+  type EndpointSummary,
+  type GlobalSummary,
+  type IdentitySummary,
+} from '../api/adminUsers';
 import { ApiError } from '../api/client';
 import { Drawer } from '../components/Drawer';
 import { Modal } from '../components/Modal';
@@ -18,6 +27,7 @@ const TABS: { key: AdminUserTab; label: string }[] = [
   { key: 'lifecycle', label: '生命周期' },
   { key: 'usage', label: '使用' },
   { key: 'audit', label: '审计' },
+  { key: 'apiUsage', label: 'API 使用分析' },
 ];
 
 const ALLOW_ALL_FLAG = 0x7fffffff;
@@ -63,6 +73,15 @@ export function AdminApiUserDetailDrawer({ userId, onClose }: Props) {
   const [auditDegraded, setAuditDegraded] = useState(false);
   const [auditReason, setAuditReason] = useState<string | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
+
+  // API 使用分析 tab state
+  const [apiEntries, setApiEntries] = useState<ApiRequestLogEntry[]>([]);
+  const [apiEndpoints, setApiEndpoints] = useState<EndpointSummary[]>([]);
+  const [apiGlobal, setApiGlobal] = useState<GlobalSummary | null>(null);
+  const [apiByIdentity, setApiByIdentity] = useState<IdentitySummary[]>([]);
+  const [apiDegraded, setApiDegraded] = useState(false);
+  const [apiReason, setApiReason] = useState<string | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
 
   const loadUser = async () => {
     if (!userId) return;
@@ -112,6 +131,27 @@ export function AdminApiUserDetailDrawer({ userId, onClose }: Props) {
     }
   };
 
+  const loadApiUsage = async () => {
+    if (!userId) return;
+    setApiLoading(true);
+    try {
+      const [recent, byEp] = await Promise.all([
+        adminUsersApi.getApiUsageRecent({ userId, limit: 50 }),
+        adminUsersApi.getApiUsageByEndpoint({ userId }),
+      ]);
+      setApiEntries(recent.entries);
+      setApiDegraded(!!recent.degraded);
+      setApiReason(recent.reason ?? null);
+      setApiEndpoints(byEp.rows);
+      setApiGlobal(byEp.global);
+      setApiByIdentity(byEp.byIdentity);
+    } catch (e) {
+      setApiEntries([]);
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
   const loadGroups = async () => {
     try {
       const r = await adminUsersApi.getUserGroups();
@@ -137,6 +177,7 @@ export function AdminApiUserDetailDrawer({ userId, onClose }: Props) {
     if (!userId || !user) return;
     if (openTab === 'usage' && !usage && !usageLoading) loadUsage();
     if (openTab === 'audit' && auditEvents.length === 0 && !auditLoading) loadAudit();
+    if (openTab === 'apiUsage' && apiEntries.length === 0 && !apiLoading) loadApiUsage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTab, userId, user]);
 
@@ -513,6 +554,202 @@ export function AdminApiUserDetailDrawer({ userId, onClose }: Props) {
                       </div>
                     </div>
                   ))}
+              </div>
+            )}
+
+            {/* API 使用分析 tab */}
+            {openTab === 'apiUsage' && (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {apiDegraded && (
+                  <div
+                    className="card"
+                    style={{
+                      padding: 12,
+                      background: '#fef3c7',
+                      color: '#92400e',
+                      fontSize: 13,
+                    }}
+                  >
+                    ⚠ {apiReason || 'ITHub 不暴露请求日志；以下为后端 ithubFetch 插桩捕获的本地记录'}
+                  </div>
+                )}
+
+                {apiLoading && <div className="skeleton" style={{ height: 80 }} />}
+
+                {!apiLoading && apiGlobal && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: 8,
+                    }}
+                  >
+                    <div className="stat-card">
+                      <div className="stat-num">{apiGlobal.totalCalls}</div>
+                      <div className="stat-label">总调用</div>
+                    </div>
+                    <div
+                      className={
+                        'stat-card ' + (apiGlobal.totalErrors > 0 ? 'stat-bad' : '')
+                      }
+                    >
+                      <div className="stat-num">
+                        {apiGlobal.totalErrors}{' '}
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          ({(apiGlobal.errorRate * 100).toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="stat-label">错误</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-num">{apiGlobal.uniqueEndpoints}</div>
+                      <div className="stat-label">独立端点</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-num">{apiGlobal.uniqueIdentities}</div>
+                      <div className="stat-label">独立身份</div>
+                    </div>
+                  </div>
+                )}
+
+                {!apiLoading && apiEndpoints.length > 0 && (
+                  <div className="card" style={{ padding: 12 }}>
+                    <h4 style={{ margin: '0 0 8px' }}>Top 端点</h4>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {apiEndpoints.slice(0, 10).map((ep) => {
+                        const max = apiEndpoints[0]?.calls ?? 1;
+                        const pct = (ep.calls / max) * 100;
+                        return (
+                          <div
+                            key={ep.method + ' ' + ep.path}
+                            style={{ fontSize: 12, fontFamily: 'monospace' }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                marginBottom: 2,
+                              }}
+                            >
+                              <span>
+                                <strong style={{ marginRight: 6 }}>
+                                  {ep.method}
+                                </strong>
+                                <span style={{ color: 'var(--text-muted)' }}>
+                                  {ep.path}
+                                </span>
+                              </span>
+                              <span>
+                                {ep.calls} 次 · 错 {ep.errors} · 平均{' '}
+                                {ep.avgLatencyMs}ms · p95 {ep.p95LatencyMs}ms
+                              </span>
+                            </div>
+                            <div
+                              style={{
+                                background: 'var(--bg-muted)',
+                                height: 4,
+                                borderRadius: 2,
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  background: 'var(--accent)',
+                                  height: '100%',
+                                  width: `${pct}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {!apiLoading && apiByIdentity.length > 1 && (
+                  <div className="card" style={{ padding: 12 }}>
+                    <h4 style={{ margin: '0 0 8px' }}>按身份</h4>
+                    <div style={{ display: 'grid', gap: 4 }}>
+                      {apiByIdentity.map((id) => (
+                        <div
+                          key={id.callerIdentity}
+                          style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between' }}
+                        >
+                          <span>
+                            {id.callerIdentity}
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {' '}· #{id.callerUserId}
+                            </span>
+                          </span>
+                          <span>
+                            {id.calls} 次 · 错 {id.errors}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!apiLoading && apiEntries.length > 0 && (
+                  <div className="card" style={{ padding: 0 }}>
+                    <h4 style={{ padding: 12, margin: 0, borderBottom: '1px solid var(--border)' }}>
+                      近期调用（最新 {apiEntries.length} 条）
+                    </h4>
+                    <table className="table" style={{ fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 130 }}>时间</th>
+                          <th style={{ width: 60 }}>方法</th>
+                          <th>路径</th>
+                          <th style={{ width: 60 }}>状态</th>
+                          <th style={{ width: 70 }}>延迟</th>
+                          <th>身份</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {apiEntries.map((e, i) => (
+                          <tr key={e.ts + '-' + i}>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              {new Date(e.ts).toLocaleString('zh-CN', { hour12: false })}
+                            </td>
+                            <td>
+                              <code style={{ fontSize: 11 }}>{e.method}</code>
+                            </td>
+                            <td>
+                              <code style={{ fontSize: 11 }}>{e.path}</code>
+                            </td>
+                            <td>
+                              <span
+                                className={
+                                  'tag ' +
+                                  (e.statusCode >= 400 ? 'tag-danger' : 'tag-success')
+                                }
+                              >
+                                {e.statusCode}
+                              </span>
+                            </td>
+                            <td>{e.latencyMs}ms</td>
+                            <td>
+                              {e.callerIdentity}
+                              <span style={{ color: 'var(--text-muted)' }}>
+                                {' '}· #{e.callerUserId}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {!apiLoading &&
+                  apiEntries.length === 0 &&
+                  apiEndpoints.length === 0 && (
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      暂无调用记录。请先让该用户触发一些 ITHub 调用（登录、对话、看知识库等），再回来查看。
+                    </div>
+                  )}
               </div>
             )}
           </>

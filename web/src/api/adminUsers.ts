@@ -1,5 +1,5 @@
 // API client for the admin "API 使用管理" module.
-// Mirrors the 11 backend endpoints at /api/admin-users/*.
+// Mirrors the 13 backend endpoints at /api/admin-users/*.
 
 import { api } from './client';
 import type { UserGroup } from '../types/api';
@@ -138,4 +138,83 @@ export const adminUsersApi = {
       `/admin-users/default-incident-template`,
       { templateId },
     ),
+
+  // --- API usage analytics (admin-only) -----------------------------------
+
+  // GET /api-usage/recent?userId?&limit?&sinceMs?
+  getApiUsageRecent: (params?: { userId?: number; limit?: number; sinceMs?: number }) => {
+    const parts: string[] = [];
+    if (params?.userId !== undefined) parts.push(`userId=${params.userId}`);
+    if (params?.limit !== undefined) parts.push(`limit=${params.limit}`);
+    if (params?.sinceMs !== undefined) parts.push(`sinceMs=${params.sinceMs}`);
+    const q = parts.length ? `?${parts.join('&')}` : '';
+    return api.get<ApiUsageRecentResponse>(`/admin-users/api-usage/recent${q}`);
+  },
+
+  // GET /api-usage/by-endpoint?userId?&sinceMs?
+  getApiUsageByEndpoint: (params?: { userId?: number; sinceMs?: number }) => {
+    const parts: string[] = [];
+    if (params?.userId !== undefined) parts.push(`userId=${params.userId}`);
+    if (params?.sinceMs !== undefined) parts.push(`sinceMs=${params.sinceMs}`);
+    const q = parts.length ? `?${parts.join('&')}` : '';
+    return api.get<ApiUsageByEndpointResponse>(`/admin-users/api-usage/by-endpoint${q}`);
+  },
 };
+// --- API usage analytics (admin-only) -------------------------------------
+
+export type ApiAuthMode = 'accessToken' | 'apiKey' | 'both' | 'none';
+
+export interface ApiRequestLogEntry {
+  ts: number;
+  method: string;
+  path: string;
+  statusCode: number;
+  latencyMs: number;
+  callerIdentity: string;
+  callerUserId: number;
+  authMode: ApiAuthMode;
+  attemptedRetries: number;
+}
+
+export interface ApiUsageRecentResponse {
+  entries: ApiRequestLogEntry[];
+  total: number;
+  degraded: boolean;
+  reason: string;
+}
+
+export interface EndpointSummary {
+  method: string;
+  path: string;
+  calls: number;
+  errors: number;
+  errorRate: number;
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+  lastCalledAt: number;
+}
+
+export interface IdentitySummary {
+  callerIdentity: string;
+  callerUserId: number;
+  calls: number;
+  errors: number;
+  errorRate: number;
+  lastCalledAt: number;
+}
+
+export interface GlobalSummary {
+  totalCalls: number;
+  totalErrors: number;
+  errorRate: number;
+  uniqueEndpoints: number;
+  uniqueIdentities: number;
+  windowMs: number;
+}
+
+export interface ApiUsageByEndpointResponse {
+  rows: EndpointSummary[];
+  global: GlobalSummary;
+  byIdentity: IdentitySummary[];
+  windowMs: number;
+}

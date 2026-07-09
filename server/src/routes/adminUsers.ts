@@ -30,6 +30,12 @@ import {
   getDefaultIncidentTemplateId,
   setDefaultIncidentTemplateId,
 } from '../adminUsers/templateConfigStore.js';
+import {
+  query as queryApiRequest,
+  summaryByEndpoint,
+  summaryByIdentity,
+  globalSummary,
+} from '../adminUsers/apiRequestLog.js';
 
 export const adminUsersRouter = Router();
 
@@ -151,7 +157,9 @@ adminUsersRouter.get('/directory', requireSession, requireAdmin, async (req, res
         try {
           const u = await ithubFetch<any>(`/api/Security/Users/${id}`, {
             accessToken: req.session!.accessToken,
-          });
+          
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
           setCached(id, u);
           return summarize(u);
         } catch {
@@ -193,7 +201,9 @@ adminUsersRouter.get('/user-groups', requireSession, requireAdmin, async (req, r
   try {
     const data = await ithubFetch<any>('/api/Security/UserGroups', {
       accessToken: req.session!.accessToken,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     const groups = Array.isArray(data) ? data : Array.isArray(data?.value) ? data.value : [];
     res.json({
       groups: groups.map((g: any) => ({
@@ -232,7 +242,9 @@ adminUsersRouter.get('/users/:id', requireSession, requireAdmin, async (req, res
   try {
     const u = await ithubFetch<any>(`/api/Security/Users/${id}`, {
       accessToken: req.session!.accessToken,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     setCached(id, u);
     res.json({
       ...summarize(u),
@@ -258,7 +270,9 @@ adminUsersRouter.post('/users/:id/api-key', requireSession, requireAdmin, async 
     const key = await ithubFetch<string>(`/api/Security/Users/${id}/ApiKey`, {
       method: 'POST',
       accessToken: req.session!.accessToken,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     invalidate(id);
     recordAudit({
       userId: id,
@@ -281,7 +295,9 @@ adminUsersRouter.delete('/users/:id/api-key', requireSession, requireAdmin, asyn
     await ithubFetch<boolean>(`/api/Security/Users/${id}/ApiKey`, {
       method: 'DELETE',
       accessToken: req.session!.accessToken,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     invalidate(id);
     recordAudit({
       userId: id,
@@ -314,11 +330,15 @@ adminUsersRouter.put('/users/:id/permissions', requireSession, requireAdmin, asy
   try {
     const cur = await ithubFetch<any>(`/api/Security/Users/${id}`, {
       accessToken: req.session!.accessToken,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     const updated = await ithubFetch<any>(`/api/Security/Users/${id}`, {
       method: 'PUT',
       accessToken: req.session!.accessToken,
-      body: { ...cur, UserAccessFlags: flags },
+      body: { ...cur, UserAccessFlags: flags ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     });
     invalidate(id);
     setCached(id, updated);
@@ -355,7 +375,9 @@ adminUsersRouter.put('/users/:id/lifecycle', requireSession, requireAdmin, async
   try {
     const cur = await ithubFetch<any>(`/api/Security/Users/${id}`, {
       accessToken: req.session!.accessToken,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     const next: any = { ...cur };
     if (typeof active === 'boolean') next.Active = active;
     if (Array.isArray(userGroupIds)) next.UserGroupIds = userGroupIds.map(Number);
@@ -363,7 +385,9 @@ adminUsersRouter.put('/users/:id/lifecycle', requireSession, requireAdmin, async
       method: 'PUT',
       accessToken: req.session!.accessToken,
       body: next,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     invalidate(id);
     setCached(id, updated);
 
@@ -410,7 +434,9 @@ adminUsersRouter.post('/users', requireSession, requireAdmin, async (req, res): 
         Email: email,
         Password: password,
         UserGroupIds: Array.isArray(userGroupIds) ? userGroupIds.map(Number) : [],
-      },
+      
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     });
     const newId = Number(created?.UserId ?? created?.Id ?? 0);
     // Invalidate directory cache so a reload picks up the new id.
@@ -491,5 +517,36 @@ adminUsersRouter.get('/audit', requireSession, requireAdmin, async (req, res): P
     events,
     degraded: true,
     reason: AUDIT_DEGRADED_REASON,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api-usage/recent?userId?&limit?&sinceMs?
+// ---------------------------------------------------------------------------
+adminUsersRouter.get('/api-usage/recent', requireSession, requireAdmin, (req, res): void => {
+  const userId = req.query.userId ? Number(req.query.userId) : undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 50;
+  const sinceMs = req.query.sinceMs ? Number(req.query.sinceMs) : undefined;
+  const entries = queryApiRequest({ userId, limit, sinceMs });
+  res.json({
+    entries,
+    total: entries.length,
+    degraded: true,
+    reason: 'ITHub 不暴露请求日志；以下为后端 ithubFetch 插桩捕获的本地记录（重启即失）',
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api-usage/by-endpoint?userId?&sinceMs?
+// ---------------------------------------------------------------------------
+adminUsersRouter.get('/api-usage/by-endpoint', requireSession, requireAdmin, (req, res): void => {
+  const userId = req.query.userId ? Number(req.query.userId) : undefined;
+  const sinceMs = req.query.sinceMs ? Number(req.query.sinceMs) : undefined;
+  const rows = summaryByEndpoint({ userId, sinceMs });
+  res.json({
+    rows,
+    global: globalSummary({ sinceMs }),
+    byIdentity: summaryByIdentity({ sinceMs }),
+    windowMs: sinceMs !== undefined ? Date.now() - sinceMs : 0,
   });
 });

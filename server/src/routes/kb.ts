@@ -36,7 +36,9 @@ kbRouter.get('/articles', requireSession, async (req, res): Promise<void> => {
     const kbId = await getKbId(req);
     const data = await ithubFetch<any>(
       `/api/Knowledge/KnowledgeBases/${kbId}/KnowledgeArticles`,
-      { accessToken: req.session!.accessToken },
+      { accessToken: req.session!.accessToken ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     );
     // Attach the local version counter to each article so the list view
     // can show "v3" alongside the title without a second round-trip. Also
@@ -63,7 +65,9 @@ kbRouter.get('/articles/:id', requireSession, async (req, res): Promise<void> =>
   try {
     const data = await ithubFetch<any>(
       `/api/Knowledge/KnowledgeArticles/${req.params.id}`,
-      { accessToken: req.session!.accessToken },
+      { accessToken: req.session!.accessToken ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     );
     // Observe ModifiedUtc and bump if it changed since the last read
     // (this catches admin-side edits too, not just our own publishes).
@@ -90,7 +94,9 @@ kbRouter.post('/search', requireSession, async (req, res): Promise<void> => {
       {
         method: 'POST',
         accessToken: req.session!.accessToken,
-        body: { Query: query, TopK: topK ?? 10 },
+        body: { Query: query, TopK: topK ?? 10 ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
       },
     );
     res.json(data);

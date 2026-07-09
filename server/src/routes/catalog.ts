@@ -19,7 +19,9 @@ catalogRouter.get('/', requireSession, async (req, res): Promise<void> => {
   try {
     const data = await ithubFetch<any>('/api/ServiceDesk/TicketTemplates', {
       accessToken: req.session!.accessToken,
-    });
+    
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,});
     res.json(data);
   } catch (e) {
     const { status, body } = err(e, '获取服务目录失败');
@@ -31,7 +33,9 @@ catalogRouter.get('/:id/menu', requireSession, async (req, res): Promise<void> =
   try {
     const data = await ithubFetch<any>(
       `/api/ServiceDesk/TicketTemplates/${req.params.id}/Menu`,
-      { accessToken: req.session!.accessToken },
+      { accessToken: req.session!.accessToken ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     );
     res.json(data);
   } catch (e) {
@@ -44,7 +48,9 @@ catalogRouter.get('/:id', requireSession, async (req, res): Promise<void> => {
   try {
     const data = await ithubFetch<any>(
       `/api/ServiceDesk/TicketTemplates/${req.params.id}`,
-      { accessToken: req.session!.accessToken },
+      { accessToken: req.session!.accessToken ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     );
     res.json(data);
   } catch (e) {
@@ -57,7 +63,9 @@ catalogRouter.get('/:id/config', requireSession, async (req, res): Promise<void>
   try {
     const data = await ithubFetch<any>(
       `/api/ServiceDesk/TicketTemplates/${req.params.id}/Config`,
-      { accessToken: req.session!.accessToken },
+      { accessToken: req.session!.accessToken ,
+        callerIdentity: req.session!.identity,
+        callerUserId: req.session!.userId,},
     );
     res.json(data);
   } catch (e) {

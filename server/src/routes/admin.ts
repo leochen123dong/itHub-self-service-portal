@@ -59,7 +59,9 @@ async function warmUpRegistry(accessToken: string): Promise<void> {
       try {
         const u = await ithubFetch<any>(`/api/Security/Users/${id}`, {
           accessToken,
-        });
+        
+        callerIdentity: 'anon',
+        callerUserId: 0,});
         const groups = Array.isArray(u?.UserGroups) ? u.UserGroups : [];
         recordObservedGroups(groups);
       } catch {
