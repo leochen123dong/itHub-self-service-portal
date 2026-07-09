@@ -1077,3 +1077,55 @@ input, textarea, select {
 .admin-table tr:hover td { background: var(--bg); }
 .rate-up   { color: var(--success); font-size: 14px; }
 .rate-down { color: var(--danger);  font-size: 14px; }
+/* --- Home page (2-up yellow CTA cards, matches reference image) --- */
+.home-2col {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+.home-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 36px;
+}
+.home-cta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  max-width: 900px;
+  margin: 80px auto 0;
+}
+.home-cta-card {
+  display: block;
+  background: #ffd400;
+  color: #1f2937;
+  text-decoration: none;
+  text-align: center;
+  padding: 48px 32px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.home-cta-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  text-decoration: none;
+  color: #1f2937;
+}
+.home-cta-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.home-cta-desc {
+  font-size: 14px;
+  color: #1f2937;
+  opacity: 0.85;
+  line-height: 1.6;
+}
+@media (max-width: 720px) {
+  .home-cta-row { grid-template-columns: 1fr; gap: 24px; margin-top: 32px; }
+  .home-cta-card { padding: 32px 20px; }
+  .home-cta-title { font-size: 18px; }
+}
