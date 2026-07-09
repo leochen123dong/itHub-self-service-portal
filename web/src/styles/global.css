@@ -135,68 +135,6 @@ input, textarea, select {
   font-weight: 600;
 }
 
-/* --- Dark topnav variant (matches the "IT 智能客服" reference image) --- */
-.topnav-dark {
-  background: #1f2937;
-  border-bottom: 1px solid #111827;
-  color: #e5e7eb;
-}
-.topnav-dark .topnav-logo {
-  color: #f9fafb;
-}
-.topnav-logo-icon-dark {
-  background: linear-gradient(135deg, #6366f1, #06b6d4);
-  border-radius: var(--radius-sm);
-}
-.topnav-dark .topnav-tab {
-  color: #d1d5db;
-}
-.topnav-dark .topnav-tab:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f9fafb;
-  text-decoration: none;
-}
-.topnav-dark .topnav-tab.active {
-  color: #f9fafb;
-  background: rgba(99, 102, 241, 0.25);
-  font-weight: 600;
-}
-.topnav-tab-disabled {
-  color: #6b7280;
-  cursor: not-allowed;
-  font-size: 14px;
-  padding: 8px 16px;
-  opacity: .55;
-}
-.topnav-dark .topnav-user-dark {
-  color: #e5e7eb;
-}
-.user-avatar-dark {
-  background: linear-gradient(135deg, #6366f1, #06b6d4);
-}
-.topnav-lang {
-  font-size: 13px;
-  color: inherit;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.06);
-}
-.topnav-username {
-  font-size: 13px;
-  color: inherit;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.topnav-dark .btn-ghost {
-  color: #e5e7eb;
-  background: rgba(255, 255, 255, 0.06);
-}
-.topnav-dark .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
 .topnav-user {
   display: flex;
   align-items: center;

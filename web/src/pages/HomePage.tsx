@@ -1,34 +1,53 @@
 import { Link } from 'react-router-dom';
+import { ChatPanel } from '../components/ChatPanel';
 
-// Two-up yellow CTA layout (matches the "IT 智能客服" reference image).
-// Each card routes to existing functionality:
-//   - 故障报修/服务申请 → /catalog (服务目录 — 选模板提工单)
-//   - 在线坐席 → /chat (AI 助手 — 含转人工按钮)
-const ctas = [
+const quickLinks = [
   {
-    to: '/catalog',
-    title: '故障报修/服务申请',
-    desc: '提交设备故障、服务申请及问题咨询',
+    to: '/kb',
+    icon: '📚',
+    title: '知识库',
+    desc: '搜索常见 IT 问题',
   },
   {
-    to: '/chat',
-    title: '在线坐席',
-    desc: 'AI智能客服及人工在线坐席',
+    to: '/catalog',
+    icon: '🛠️',
+    title: '服务目录',
+    desc: '提交服务请求',
+  },
+  {
+    to: '/tickets',
+    icon: '📋',
+    title: '我的工单',
+    desc: '查看进度与备注',
   },
 ];
 
 export function HomePage() {
   return (
-    <div className="home-2col">
-      <h1 className="home-title">欢迎使用IT智能客服</h1>
+    <div className="container">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">欢迎使用 ITHub 智能服务门户</h1>
+          <p className="page-subtitle">直接描述您的 IT 问题，AI 助手会即时回答；解决不了时可一键转人工开单</p>
+        </div>
+      </div>
 
-      <div className="home-cta-row">
-        {ctas.map((c) => (
-          <Link key={c.to} to={c.to} className="home-cta-card">
-            <div className="home-cta-title">{c.title}</div>
-            <div className="home-cta-desc">{c.desc}</div>
-          </Link>
-        ))}
+      <ChatPanel variant="embedded" />
+
+      <div style={{ marginTop: 24 }}>
+        <div className="section-title">其他入口</div>
+        <div className="quick-links">
+          {quickLinks.map((q) => (
+            <Link key={q.to} to={q.to} className="quick-link">
+              <span className="quick-link-icon">{q.icon}</span>
+              <span className="quick-link-body">
+                <span className="quick-link-title">{q.title}</span>
+                <span className="quick-link-desc">{q.desc}</span>
+              </span>
+              <span className="quick-link-arrow">→</span>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );
